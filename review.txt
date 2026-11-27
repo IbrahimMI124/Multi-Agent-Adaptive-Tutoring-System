@@ -1,1470 +1,975 @@
 ===============================================================================
- REVIEW LOG - ASSESSMENT ENGINE SPECIFICATION AND CROSS-DOCUMENT AUDIT
- Repository: Multi-Agent-Adaptive-Tutoring-System (SPE final project)
- Prepared: 2026-11-28, alongside the new ASSESSMENT.md
+ review.txt - DESIGN REVIEW OF THE MULTI-AGENT ADAPTIVE TUTORING SYSTEM
+ Last updated: 2026-11-28  
 ===============================================================================
 
-PURPOSE AND HOW TO READ THIS LOG
-  This is the audit log for the Assessment Engine design. It records every
-  inconsistency, gap, ambiguity, conflict and open decision found while
-  writing ASSESSMENT.md, including issues that design introduced.
 
-  After the first draft, a scope review was done at the owner's request.
-  ASSESSMENT.md was cut back to the minimum the owner's requirements need,
-  and its structure, depth and wording were aligned with the Planner,
-  Orchestrator and Tutor specs. Everything deliberately left out is
-  recorded in section 11 (S-01 to S-13), so nothing was dropped silently.
+WHAT IS THIS FILE FOR?
+----------------------
+This file lists the problems found in the project's design documents:
+  - LEARNING_PLANNER.md
+  - LEARNING_ORCHESTRATOR.md
+  - TUTOR.md
+  - ASSESSMENT.md
+  - the code scaffold in agentic-learning-platform/
 
-  No existing specification was edited. LEARNING_PLANNER.md,
-  LEARNING_ORCHESTRATOR.md, TUTOR.md, README.md, ASSESMENT.md and every
-  AGENT.md file are unchanged. Each fix below is a recommendation for the
-  project owner to approve as a coordinated change.
+It was written while ASSESSMENT.md was being created. After that, the whole
+repository was read again to check it.
 
-  Each entry has an ID (R-nnn), a severity (Critical / High / Medium / Low)
-  and a status label:
-    [Confirmed]  verified directly in the cited file text
-    [Gap]        something no document defines (verified absence)
-    [Inferred]   a risk reasoned from the design, not a contradiction in text
-    [New]        introduced or exposed by the new ASSESSMENT.md
-    [Open]       a product decision awaiting the owner
-  Line numbers refer to the files as they are in commit c466657.
+Use this file to:
+  1. see what must be decided before anyone writes code (Part 2);
+  2. find where each problem is, by file and line (Part 3);
+  3. see which decisions are waiting for the project owner (Part 4);
+  4. look at suggested fixes (Part 6). These are suggestions only. Check
+     them before using them.
 
-WHAT WAS READ AND VERIFIED
-  - Full text of README.md, LEARNING_PLANNER.md, LEARNING_ORCHESTRATOR.md,
-    TUTOR.md, ASSESMENT.md (0 bytes), transcript_temp.txt and ayush.txt.
-  - The complete repository tree. Every scaffold file under
-    agentic-learning-platform/ is 0 bytes except three AGENT.md files.
-    Confirmed with wc and cmp:
-      backend/app/agents/planner/AGENT.md          = LEARNING_PLANNER.md
-      backend/app/agents/tutor/AGENT.md            = TUTOR.md
-      backend/app/agents/learning_context/AGENT.md = LEARNING_ORCHESTRATOR.md
-      backend/app/agents/assessment/AGENT.md       = empty
-      backend/app/orchestrator/ORCHESTRATOR.md     = empty
-      docs/*.md, AGENTS.md, README.md, requirements.txt, .gitignore,
-      contracts/*, db/*, tests/*                   = empty
-  - The whole of 2026.eacl-demo.10.pdf (10 PDF pages = proceedings pp.
-    129-138), including Figures 1-6, Tables 1-2 and Appendices A-D. It was
-    supplied outside the repository, from the user's Downloads folder.
-  - External sources fetched on 2026-11-28 through this environment's web
-    fetch tool (see R-040). Four CMU Eberly Center pages loaded and back the
-    design principles in ASSESSMENT.md. One Iowa State page returned 404 and
-    is NOT cited. The three university URLs cited in LEARNING_PLANNER.md
-    loaded.
+This file does NOT change any spec. Nothing listed here has been applied.
 
-LIMITATIONS OF THIS REVIEW
-  - The "approved source library" does not exist yet. Sources were checked
-    for accessibility and relevance only; they have not been admitted under
-    any project policy (R-038).
-  - Fetched page content was summarised by a sub-agent and only paraphrased
-    here. Nothing beyond the short summaries in R-040 is claimed.
-  - No code exists, so nothing was tested. The acceptance criteria in
-    ASSESSMENT.md are written to be testable later.
+
+HOW TO READ AN ENTRY
+--------------------
+  R-001  [Critical]  Short title
+    Problem: what is wrong
+    Where:   file and line(s) where you can see it
+    Why it matters: what goes wrong if it is ignored
+
+  Severity:
+    Critical  blocks several components from being built
+    High      must be decided before building the part it affects
+    Medium    should be decided before that part is finished
+    Low       cleanup or a small clarification
+
+  - IDs never change. ASSESSMENT.md refers to them (for example "R-001").
+  - Entries are grouped by topic, so the numbers are not in order.
+  - Line numbers match the files at commit 265c4bb. The Planner,
+    Orchestrator and Tutor specs have not changed since commit c466657.
+
+
+===============================================================================
+ PART 1 - SUMMARY
+===============================================================================
+
+Where the project stands
+  - Specs exist for the Planner, Orchestrator (Curator), Tutor and
+    Assessment Engine.
+  - There is no separate spec for Learning Context, the shared teaching
+    library, the database, the API or the stack.
+  - No code exists. The 54 files under agentic-learning-platform/ are empty
+    (all .py files, requirements.txt, docs/*.md, AGENTS.md, README.md,
+    ORCHESTRATOR.md), except the four AGENT.md files.
+  - Those four AGENT.md files are exact copies of the root specs. One of
+    them is in the wrong folder (R-043).
+
+Issue count
+  61 issues: 1 Critical, 7 High, 33 Medium, 20 Low.
+  60 are open. 1 is resolved (R-045).
+
+Is the project ready to implement?
+  Not yet. The design is consistent on its main rules:
+    - only the Orchestrator writes to the database;
+    - agents never call each other;
+    - answer keys are never shown during an attempt;
+    - grades come only from the saved rubric.
+  But about seven decisions must be made first (Part 2). Without them,
+  code would be written against contracts that will change.
+
+
+===============================================================================
+ PART 2 - BLOCKERS (READ THESE FIRST)
+===============================================================================
+
+  R-001  [Critical]  Nothing creates the "objective IDs" that three agents
+                     depend on.
+  R-002  [High]      The new pre-planning diagnostic does not fit the current
+                     Planner/Orchestrator flow.
+  R-003  [High]      The diagnostic cannot be started, because
+                     start_assessment needs a course session.
+  R-053  [Medium]    The Orchestrator would treat diagnostic results as
+                     progression. (Fix together with R-002 and R-003.)
+  R-004  [High]      There is no evidence type for diagnostic results.
+  R-005  [High]      It is unclear whether Learning Context is an agent or a
+                     record.
+  R-010  [High]      "Pass" is not defined. ASSESSMENT.md proposes a rule.
+  R-057  [High]      No tech stack has been chosen (framework, database, LLM,
+                     frontend).
+
+  Accepted risk for the MVP (no decision needed to start, but keep an eye
+  on it):
+  R-020  [High]      AI grading of open answers can vary between runs.
+
+
+===============================================================================
+ PART 3 - ALL ISSUES
+===============================================================================
+
+-------------------------------------------------------------------------------
+ 3.1  Contracts between the agents
+-------------------------------------------------------------------------------
+
+R-001  [Critical]  Objective IDs are used everywhere, but nothing creates them
+  Problem: The Orchestrator, Tutor and Assessment all work per "objective"
+    (objective_id). The Planner only outputs topics (with IDs) and
+    course-level "expected outcomes". No spec says:
+      - what an objective is;
+      - who gives it an ID;
+      - how it links to topics.
+  Where:
+    - LEARNING_PLANNER.md sec 6. Its own text still mentions "objectives"
+      at lines 23, 42 and 111.
+    - LEARNING_ORCHESTRATOR.md lines 57, 68 and 85-87.
+    - TUTOR.md lines 51 and 115.
+    - ASSESSMENT.md sec 5, where it is marked "provisional".
+  Why it matters: Teaching targets, assessment coverage, evidence,
+    remediation and the database all need this key. Quietly using topic
+    IDs instead would hide a design decision.
+
+R-002  [High]  The pre-planning diagnostic has no place in the current flow
+  Problem: The diagnostic runs between preview_goal and build_curriculum.
+    However:
+      - build_curriculum has no input for its results;
+      - the Orchestrator workflow goes straight from preview to
+        curriculum.
+  Where:
+    - LEARNING_PLANNER.md line 40, and sec 7 lines 63-64.
+    - LEARNING_ORCHESTRATOR.md line 52, line 93 (workflow step 1) and
+      line 130 (acceptance criterion 1).
+  Why it matters: The diagnostic cannot influence the plan. Developers
+    might also connect Assessment directly to the Planner, which breaks the
+    "agents only talk through the Orchestrator" rule.
+
+R-003  [High]  start_assessment cannot start a diagnostic
+  Problem: start_assessment needs a Session ID. Sessions are only created
+    by open_course, which happens after a curriculum exists. The list of
+    allowed assessment "purposes" is also never written down.
+  Where: LEARNING_ORCHESTRATOR.md lines 57, 68 and 72.
+  Why it matters: There is no way to start the diagnostic.
+
+R-053  [Medium]  The Orchestrator treats every graded attempt as
+       progression
+  Problem: The report protocol always "applies the progression policy" to
+    a graded result. Diagnostic results must never do this.
+  Where: LEARNING_ORCHESTRATOR.md lines 87 and 97.
+  Why it matters: A diagnostic could unlock courses by mistake.
+
+R-004  [High]  There is no evidence type for diagnostic results
+  Problem: The Orchestrator knows three kinds of evidence:
+      - self-report;
+      - Tutor observations;
+      - graded results.
+    Diagnostic answers fit none of them. They are real answers, so they
+    are not self-report, but they must not count as course grades.
+  Where:
+    - LEARNING_ORCHESTRATOR.md line 103.
+    - LEARNING_PLANNER.md line 59, where the "kind of evidence" is not
+      listed.
+  Why it matters: Stored as grades, diagnostic results could unlock
+    courses. Stored as self-report, their value is lost.
+
+R-005  [High]  Is Learning Context an agent or a record?
+  Problem: The specs disagree.
+    - The Orchestrator says Learning Context is a record it keeps, and that
+      it is the only writer. It says this overrides the Planner.
+    - The Planner's table still says "Learning Context" persists the data.
+    - The scaffold has agents/learning_context/agent.py, prompts.py and a
+      test file, which looks like an AI agent.
+  Where:
+    - LEARNING_PLANNER.md line 21.
+    - LEARNING_ORCHESTRATOR.md lines 7 and 28.
+    - The agents/learning_context/ folder.
+    - transcript_temp.txt lines 568-576.
+  Why it matters: Different developers will build different things.
+
+R-006  [Medium]  Who fetches teaching material?
+  Problem: The specs give different answers.
+    - The Tutor says it searches the shared library itself.
+    - The Orchestrator says it supplies the inputs.
+    - ASSESSMENT.md follows the Tutor.
+  Where:
+    - TUTOR.md lines 15 and 90.
+    - LEARNING_ORCHESTRATOR.md lines 7 and 114.
+    - ASSESSMENT.md sec 7 step 3.
+  Why it matters: It changes how the library service is built and how
+    strictly "only the Orchestrator coordinates" is read.
+
+R-007  [Medium]  Old decisions in the transcript are not marked as replaced
+  Problem: transcript_temp.txt says three things that later specs changed:
+    - the Tutor switches teaching method (it is now the Orchestrator);
+    - "Learning Context AI" is the only writer (it is now the
+      Orchestrator);
+    - a 5-10 question quiz runs before the curriculum. This was replaced by
+      the course-entry familiarity chat, and is now partly brought back as
+      the optional diagnostic.
+    No document records these changes.
+  Where:
+    - transcript_temp.txt lines 373-387, 436-454 and 568-576.
+    - LEARNING_ORCHESTRATOR.md lines 13 and 102.
+    - LEARNING_PLANNER.md line 80.
+  Why it matters: Anyone reading the transcript gets the wrong design.
+
+R-008  [Medium]  The grading request carries learner context
+  Problem: The Orchestrator sends "learner context relevant to feedback"
+    in the same request as grading. The rule says context must not affect
+    the grade, but inside one AI call it can.
+  Where:
+    - LEARNING_ORCHESTRATOR.md lines 96 and 105.
+    - ASSESSMENT.md sec 5, which allows only a separate "feedback context".
+  Why it matters: Grades could be biased by what the system knows about
+    the learner.
+
+R-009  [Medium]  The teaching method is not passed to Assessment, and no
+       list of methods exists
+  Problem: The owner wants assessment to be informed by the teaching method
+    (the "pedagogical model"). However:
+      - the Orchestrator does not send it to Assessment;
+      - it is chosen per objective, so one course can use several;
+      - no registry of models exists.
+  Where:
+    - LEARNING_ORCHESTRATOR.md lines 13 and 96.
+    - TUTOR.md line 118.
+    - ASSESSMENT.md sec 5.
+  Why it matters: A contract field is missing, and the Tutor also depends
+    on the missing registry.
+
+R-051  [Medium]  ASSESSMENT.md needs fields the Orchestrator does not yet
+       send or store
+  Problem: The missing fields are:
+    - inputs: assessment policy, excluded items, entry path (skipped or
+      studied), pedagogical context, selection and feedback context, and a
+      goal-preview reference for the diagnostic;
+    - outputs: separate learner and grading parts of a prepared report,
+      criterion judgements, evidence type and basis, recommended next
+      action, the diagnostic planning summary, and issue codes;
+    - action names: prepare_assessment and grade_submission. The
+      Orchestrator only names the learner actions start_assessment and
+      submit_assessment.
+  Where:
+    - ASSESSMENT.md secs 5-6.
+    - LEARNING_ORCHESTRATOR.md secs 5-7 and lines 83-87.
+  Why it matters: The two specs will not match in code.
+
+R-054  [Low]  The Orchestrator has no rule for a failed assessment
+       preparation
+  Problem: The Orchestrator's failure table covers grading timeouts. It
+    does not cover preparation failing, for example when a target cannot
+    be grounded in sources or there is not enough material.
+  Where: LEARNING_ORCHESTRATOR.md sec 10 (lines 117-126).
+  Why it matters: It is unclear what the learner sees, or whether the
+    Planner should be asked to review.
 
 
 -------------------------------------------------------------------------------
-0. EXECUTIVE SUMMARY / SEVERITY OVERVIEW
--------------------------------------------------------------------------------
-  Totals: 61 issues - Critical 1, High 7, Medium 33, Low 20.
-  (R-057 to R-061 were added in section 12 after a readiness re-scan.
-  R-045 is now resolved.)
-  Also recorded: 13 scope decisions (S-xx, section 11) and 26 PDF design
-  records (PDF-xx, section 6).
-
-  Must resolve before implementation:
-    R-001 (Critical)  No document defines or produces the objective_id that
-                      the Orchestrator, Tutor and Assessment all depend on.
-    R-002 (High)      The pre-planning diagnostic has no place in the current
-                      Planner and Orchestrator flow and contracts.
-    R-003 (High)      Orchestrator start_assessment requires a course Session
-                      ID, which does not exist before the curriculum.
-    R-004 (High)      The evidence taxonomy has no type for diagnostic
-                      evidence.
-    R-005 (High)      Learning Context is described both as an
-                      Orchestrator-kept record and, by the scaffold, as an
-                      agent.
-    R-010 (High)      "Pass" for a course with several mandatory objectives
-                      is undefined. ASSESSMENT.md proposes a rule.
-    R-020 (High)      Rubric grading by an LLM can be inconsistent. The MVP
-                      relies on deterministic grading, anchored rubric
-                      levels, "unscorable" and first-accepted-report. A
-                      second grading pass was left out (S-01).
-
-  ASSESSMENT.md is consistent with all existing hard rules (single writer,
-  hub-and-spoke, answer-key isolation, grading against saved criteria,
-  pending on timeout, fresh-task verification). It does need new optional
-  fields in Orchestrator contracts (R-051). Every default it proposes is
-  listed in section 7 for approval.
-
-
--------------------------------------------------------------------------------
-1. CRITICAL CROSS-DOCUMENT INCONSISTENCIES
+ 3.2  Assessment rules that are still open
 -------------------------------------------------------------------------------
 
-R-001  [Critical] [Confirmed gap]  Objective IDs are used everywhere but
-       produced nowhere
-  Location:
-    LEARNING_PLANNER.md
-      - sec 6 (lines ~55-59): course nodes have "expected outcomes"; a
-        syllabus "lists topics" with "an identifier, title, priority, depth,
-        and source references"; it also "defines how the learner will
-        demonstrate the required outcomes". There is no objective entity.
-      - It nevertheless refers to objectives: line 23 ("determine which
-        objectives the learner demonstrated"), line 42 ("assessment evidence
-        tied to learning objectives"), line 111 ("objective-level
-        evidence").
-    LEARNING_ORCHESTRATOR.md
-      - line 57 "Target objective IDs"; line 68 open_course returns "course
-        objectives"; lines 85-87 report protocol "objective coverage",
-        "evidence for each assessed objective"; lines 95-97, 133.
-    TUTOR.md
-      - line 51 "Objective ID and description, relevant syllabus topic
-        identifiers, sequence, depth, expected outcomes". This implies an
-        objective is a separate record linked to topics.
-      - line 115 says the Planner provides "learning objectives". The Planner
-        output contract does not.
-      - lines 56, 72, 82.
-    transcript_temp.txt
-      - lines 506-514 recommend "brief learning objectives for each node".
-        This was never carried into the Planner output contract.
-  Issue: Three contracts treat objective_id as the key for teaching,
-    assessment coverage, evidence and remediation. No contract creates
-    objective records, assigns their IDs, links them to topics or outcomes,
-    or validates them. The Planner text uses "objective" informally.
-  Why it matters: Assessment coverage, per-objective evidence, Tutor
-    remediation targets, recommend_review inputs and Learning Context
-    updates cannot be implemented consistently without a shared key.
-    Equating topic_id with objective_id silently would hide a modelling
-    decision. One topic may need several assessable objectives, or one
-    objective may span topics.
-  Impact on Assessment: ASSESSMENT.md defines a provisional "assessment
-    target" with the minimum fields it needs (sec 5). It refuses to mint
-    course objective IDs and allows only an explicitly labelled interim
-    target_kind "topic" (R-036).
-  Recommended resolution (PROPOSAL, not an existing decision):
-    Add "assessable learning objectives" nested under syllabus topics in the
-    Planner's syllabus output. Each objective has:
-      - objective_id, unique within a curriculum version;
-      - topic_id;
-      - an observable statement;
-      - a required depth / cognitive demand;
-      - a priority, inherited from the topic unless overridden;
-      - links to course expected outcomes;
-      - a demonstration expectation;
-      - source references.
-    The Orchestrator's validation then also checks that:
-      - every mandatory topic has at least one objective;
-      - objective IDs are unique;
-      - every expected outcome is covered by at least one objective.
-  Coordinated changes needed:
-    - LEARNING_PLANNER.md sec 6: syllabus/topic definition. Also
-      build_curriculum and replan_curriculum outputs, recommend_review input
-      (line 42), and AC2/AC3/AC5.
-    - LEARNING_ORCHESTRATOR.md: sec 5 inputs (start_assessment), sec 6
-      outputs (open_course "course objectives"), sec 7 step 1 validation,
-      and the reporting protocol.
-    - TUTOR.md: sec 5 input line 51 (source of the objective record) and
-      sec 9 line 115.
-    - ASSESSMENT.md sec 5: replace "provisional" with the agreed contract.
-    - Scaffold (currently empty): docs/AGENT-CONTRACTS.md,
-      docs/DATABASE-SCHEMA.md, backend/app/contracts/models.py.
+R-010  [High]  "Pass" is not defined
+  Problem: No spec says how a course assessment is passed. Open questions:
+    - Must every mandatory objective be shown?
+    - Is there a percentage?
+    - How do partial or unclear results count?
+    ASSESSMENT.md proposes a rule: every mandatory target must be
+    "demonstrated", and unclear results are "inconclusive", never pass or
+    fail.
+  Where:
+    - LEARNING_ORCHESTRATOR.md lines 87 and 97.
+    - ASSESSMENT.md sec 8.
+  Why it matters: Course unlocking depends on it.
 
-R-002  [High] [Confirmed]  The pre-planning diagnostic is not supported by
-       the current Planner and Orchestrator flow
-  Location:
-    - LEARNING_PLANNER.md sec 5 line 40: build_curriculum inputs are "Goal
-      preview" plus optional university references. There is no
-      diagnostic/baseline input.
-    - LEARNING_PLANNER.md sec 7 lines 63-64: the workflow goes straight from
-      preview to drafting the DAG.
-    - LEARNING_ORCHESTRATOR.md:
-      - sec 4: the action list has no diagnostic action;
-      - line 52: build_curriculum inputs are a preview reference plus
-        sources;
-      - line 93 (workflow step 1): "Call the Planner's preview_goal and
-        build_curriculum";
-      - line 130 (AC1): "goal preview, then a validated full curriculum,
-        then an optional course-entry familiarity check".
-  Issue: The owner's new requirement puts an optional Assessment-led
-    diagnostic between preview_goal and build_curriculum. No current
-    contract carries a diagnostic report to the Planner or includes the step
-    in the Orchestrator workflow. Because the diagnostic is optional, AC1's
-    order still holds when it is skipped. With the diagnostic, the order
-    becomes preview -> diagnostic -> curriculum, which AC1 does not
-    describe.
-  Why it matters: Without these changes the diagnostic cannot influence the
-    DAG. Implementers may also route Assessment output straight to the
-    Planner, breaking hub-and-spoke.
-  Impact on Assessment: ASSESSMENT.md defines the diagnostic as purpose
-    "pre_planning_diagnostic" of prepare_assessment and grade_submission.
-    Its output is a "diagnostic planning summary" for the Orchestrator to
-    forward. No Assessment-to-Planner call exists.
-  Recommended resolution:
-    (a) Planner sec 5: add an optional build_curriculum input, "pre-planning
-        diagnostic report (scoped planning summary)".
-    (b) Planner sec 7 step 2: use the report when it is supplied, as
-        evidence that informs depth and starting points. The Planner keeps
-        academic judgement, and unknown areas stay unknown.
-    (c) Orchestrator sec 7 step 1: offer the optional diagnostic after the
-        preview. Forward only the planning summary, never keys or raw
-        responses.
-    (d) Orchestrator AC1: allow "preview -> optional diagnostic ->
-        curriculum -> optional familiarity check".
-    (e) Record explicitly that the diagnostic does not replace
-        check_familiarity (Planner sec 8, line 80).
-  Coordinated changes: LEARNING_PLANNER.md secs 5, 7 and 11;
-    LEARNING_ORCHESTRATOR.md secs 4, 5, 7 and 11; ASSESSMENT.md (already
-    assumes this).
+R-011  [Medium]  The pass rule could be defined in two places; the owner of
+       the policy is unclear
+  Problem: Assessment returns an outcome per attempt. The Orchestrator
+    decides progression. If both define "pass", the two can drift apart.
+    Nobody owns the "assessment policy" (pass rule, coverage minimum,
+    diagnostic size).
+  Where: LEARNING_ORCHESTRATOR.md lines 87 and 106; ASSESSMENT.md sec 9.
+  Why it matters: Two definitions of pass would give inconsistent
+    unlocks.
 
-R-003  [High] [Confirmed]  start_assessment needs a Session ID, which does
-       not exist before the curriculum; assessment purposes are not
-       enumerated
-  Location: LEARNING_ORCHESTRATOR.md
-    - line 57: start_assessment requires "Session ID and available
-      assessment purpose";
-    - line 68: sessions are created by open_course;
-    - line 72: start_assessment returns "Saved attempt ID, questions, and
-      instructions".
-  Issue: Before build_curriculum there is no course and no session, so the
-    current start_assessment cannot start a diagnostic. The set of
-    "assessment purposes" is also never listed.
-  Impact on Assessment: ASSESSMENT.md defines four purposes. The diagnostic
-    must reference a goal preview, not a curriculum version, course or
-    session.
-  Recommended resolution: choose one of these.
-    Option A (recommended, fewer actions): start_assessment accepts EITHER
-      a Session ID OR a goal-preview reference. For purpose
-      pre_planning_diagnostic it requires the preview reference.
-    Option B: add learner actions "start_diagnostic" and
-      "decline_diagnostic".
-    In either case, enumerate the purposes in Orchestrator sec 5:
-      pre_planning_diagnostic, course_completion, targeted_check,
-      post_remediation_verification.
-  Coordinated changes: LEARNING_ORCHESTRATOR.md secs 4-6 and possibly 11;
-    ASSESSMENT.md sec 4 (attempt lifecycle note).
+R-012  [Medium]  The attempt lifecycle is not defined
+  Problem: Three things are missing:
+    - attempt states (prepared, shown, submitted, grading, graded,
+      abandoned);
+    - whether the attempt ID exists before Assessment is called;
+    - which version is kept when preparation is retried, since a retry can
+      produce different questions.
+  Where: LEARNING_ORCHESTRATOR.md lines 72, 96, 123 and 126.
+  Why it matters: Retries and resumes could duplicate or lose attempts.
 
-R-004  [High] [Confirmed gap]  The evidence taxonomy has no type for
-       diagnostic evidence
-  Location:
-    - LEARNING_ORCHESTRATOR.md line 103: three evidence uses, namely
-      self-reports, Tutor observations and graded results.
-    - LEARNING_PLANNER.md line 59: "states the reason and kind of evidence".
-      The kinds are not enumerated.
-  Issue: Diagnostic task answers are direct evidence, so they are not
-    self-report. They are not course-completion grades either, and must
-    never support progression. The taxonomy has no slot for them.
-  Why it matters: If diagnostic evidence is stored as "graded results", it
-    could unlock courses or carry forward. If it is stored as self-report,
-    its direct-evidence value is lost.
-  Impact on Assessment: ASSESSMENT.md labels evidence_type as
-    "diagnostic_task" or "graded_assessment". It forbids diagnostic evidence
-    from progression and from carry-forward.
-  Recommended resolution: Add a fourth type to Orchestrator sec 8:
-    "diagnostic evidence informs initial planning and, if approved (R-033),
-    familiarity recommendations; never progression". Enumerate evidence
-    kinds in Planner sec 6: self_reported, diagnostic, assessed.
-  Coordinated changes: LEARNING_ORCHESTRATOR.md sec 8;
-    LEARNING_PLANNER.md sec 6; DB schema (future).
-
-R-005  [High] [Confirmed]  Learning Context: Orchestrator-kept record or
-       separate agent?
-  Location:
-    - LEARNING_PLANNER.md line 21: the non-responsibilities table assigns
-      "Persist learner context, reported familiarity, and assessment
-      evidence" to "Learning Context".
-    - LEARNING_ORCHESTRATOR.md line 7: "sole writer to the main database".
-      Line 28: "Learning Context is a record the Orchestrator maintains.
-      This ownership supersedes the persistence assignment in the Planner's
-      responsibilities table".
-    - Scaffold: backend/app/agents/learning_context/ contains agent.py,
-      prompts.py, schemas.py and __init__.py; tests/test_learning_context.py
-      exists. All are empty, but the structure implies an LLM agent.
-    - transcript_temp.txt lines 568-576: "Only Learning Context AI updates
-      the stored learner context". This was superseded by the Orchestrator
-      text but is not marked as such (see R-007).
-  Issue: The Orchestrator explicitly supersedes the Planner table, but the
-    Planner text was never updated and the scaffold still models an agent.
-  Impact on Assessment: ASSESSMENT.md follows the Orchestrator: the engine
-    never updates Learning Context, and evidence goes to the Orchestrator.
-  Recommended resolution: Decide whether Learning Context is (a) a record
-    only, in which case the agent folder and test file should be removed or
-    moved under db/, or (b) a stateless summarisation helper that the
-    Orchestrator invokes and that never writes. Then update Planner line 21
-    to name the Orchestrator as the persistence owner.
-  Coordinated changes: LEARNING_PLANNER.md sec 3; scaffold layout; R-043.
-
-R-006  [Medium] [Confirmed ambiguity]  Who retrieves teaching-library
-       material: agents or the Orchestrator?
-  Location:
-    - TUTOR.md line 15: the Tutor will "Retrieve relevant material from the
-      shared teaching library first and request additional approved-source
-      retrieval"; also line 90.
-    - LEARNING_ORCHESTRATOR.md line 7: it "supplies task-specific learner
-      context"; line 114: the library "Supplies reusable teaching material".
-  Issue: It is unclear whether agents read the library directly, which
-    would make the library a shared read-only service rather than an agent,
-    or whether the Orchestrator resolves material and passes it in.
-  Impact on Assessment: ASSESSMENT.md lets the engine perform a read-only
-    library lookup and approved retrieval itself, unless the Orchestrator
-    supplies the material. This matches the Tutor's pattern.
-  Recommended resolution: State in Orchestrator sec 9 that the shared
-    teaching library is a read-only service that agents may query directly.
-    It holds no learner data and is not an agent, so querying it does not
-    break hub-and-spoke. Approved retrieval goes through the library's
-    admission policy (R-038).
-  Coordinated changes: LEARNING_ORCHESTRATOR.md sec 9; TUTOR.md sec 9;
-    ASSESSMENT.md sec 9 (already assumes this).
-
-R-007  [Medium] [Confirmed]  Changes from the transcript are not marked as
-       superseded, and the diagnostic revives decision 4
-  Location: transcript_temp.txt
-    - lines 373-387 (decision 1): "Allow the Tutor to switch teaching
-      strategies". Now the Orchestrator switches (Orchestrator line 13 and
-      line 102; Tutor sec 8 "Follow the selected pedagogical model").
-    - lines 436-454 (decision 4): bounded recursive questioning before the
-      curriculum, at most 5-10 questions. The Planner replaced it with a
-      course-entry familiarity conversation after publication (Planner
-      line 80).
-    - lines 568-576: Learning Context AI as the sole updater (now the
-      Orchestrator).
-  Issue: No document records these supersessions. The new owner requirement
-    effectively brings decision 4 back as an optional, bounded,
-    Assessment-led diagnostic, while keeping the familiarity check.
-  Recommended resolution: Add a short "Decision log / supersedes" note,
-    for example in docs/ARCHITECTURE.md or ayush.txt, recording:
-    - who switches the pedagogical model (the Orchestrator);
-    - that a pre-planning diagnostic exists (Assessment, optional, bounded)
-      in addition to the course-entry familiarity check;
-    - who writes Learning Context (the Orchestrator).
-  Coordinated changes: Documentation only.
-
-R-008  [Medium] [Confirmed wording] [Inferred risk]  Learner context sent
-       with the grading request can leak into grades
-  Location:
-    - LEARNING_ORCHESTRATOR.md line 96: "Send the saved questions, criteria,
-      and submission along with any learner context relevant to feedback";
-    - line 105: "Learner context can inform question selection and
-      feedback. Use the rubric saved with the attempt to determine the
-      grade".
-  Issue: The rule is correct, but the same call carries learner context.
-    In a single LLM prompt, context such as self-reports, earlier struggles
-    or "needs to pass to continue" can bias scoring.
-  Impact on Assessment: ASSESSMENT.md splits grading into two parts:
-    - a context-free scoring step;
-    - a feedback step that may use only a separate "feedback context"
-      (language, accessibility, detail level).
-    It forbids profile, self-report, prior grades, Tutor observations and
-    progression status in the grading input.
-  Recommended resolution: Change Orchestrator line 96 to send only a
-    "feedback context" (language, accessibility, feedback preference) with
-    grading, and state that scoring never receives learner context.
-  Coordinated changes: LEARNING_ORCHESTRATOR.md sec 7 step 4 and sec 8.
-
-R-009  [Medium] [Confirmed gap]  The pedagogical model is not an Assessment
-       input; the registry is undefined; the model is chosen per objective
-  Location:
-    - LEARNING_ORCHESTRATOR.md line 13: "Choose a pedagogical model for the
-      current objective". Line 96 lists Assessment inputs without the
-      model.
-    - TUTOR.md line 118: "The model registry and selection mechanism are
-      outside this specification."
-  Issue: The owner expects post-node assessment to be "informed by the
-    pedagogical model", but the Orchestrator does not send it to
-    Assessment. Models are chosen per objective, so one course assessment
-    may span several models. No registry defines model identifiers.
-  Impact on Assessment: ASSESSMENT.md adds an OPTIONAL "pedagogical
-    context", per target or uniform for the attempt. It restricts its use:
-    - it may choose among equally aligned task formats and familiar
-      presentation;
-    - it may NOT change targets, depth, criteria, coverage or the pass rule.
-    The assessment approach, which is fixed by purpose, is kept distinct
-    from the pedagogical model.
-  Recommended resolution:
-    - Add "pedagogical context (optional, per objective)" to Orchestrator
-      line 96.
-    - Decide who owns the model registry, its identifiers and its teaching
-      instructions: an Orchestrator configuration file is the simplest
-      option.
-    - Confirm that the "standards never change with the model" rule is
-      acceptable.
-  Coordinated changes: LEARNING_ORCHESTRATOR.md secs 5, 7 and 9; a future
-    registry doc.
-
-
--------------------------------------------------------------------------------
-2. ASSESSMENT-SPECIFIC DESIGN GAPS
--------------------------------------------------------------------------------
-
-R-010  [High] [Open]  The meaning of "pass" across several mandatory
-       objectives is undefined
-  Location:
-    - LEARNING_ORCHESTRATOR.md line 87: "Outcome ... apply the progression
-      policy"; line 97: "A pass can make eligible successor courses
-      available".
-    - No document defines how a pass is computed.
-  Issue: Many questions are unanswered:
-    - Does pass require every mandatory objective?
-    - Is a percentage threshold used?
-    - How do partial or inconclusive results count?
-    - Do recommended topics count?
-  Impact on Assessment: ASSESSMENT.md sec 8 PROPOSES these MVP defaults:
-    - Pass rule: every in-scope mandatory target must be "demonstrated".
-      Any not_demonstrated or partial target gives not_passed. Otherwise,
-      any inconclusive or not_assessed target gives inconclusive. Otherwise
-      the outcome is passed. Recommended targets are non-blocking; optional
-      targets are excluded unless assigned.
-    - Fixed status mapping: an unscorable required criterion makes the
-      target inconclusive; all required criteria met makes it
-      demonstrated; no required criterion met or partially met makes it
-      not_demonstrated; otherwise partial.
-    - Missing answers: a blank in a course assessment is no_response; an
-      unanswered diagnostic item leaves its area not_assessed.
-    No percentage threshold is invented.
-  Recommended resolution: The owner should approve or replace the rule.
-    Keep one definition and reference it from the Orchestrator's
-    progression policy (R-011).
-  Coordinated changes: LEARNING_ORCHESTRATOR.md sec 8; ASSESSMENT.md sec 8.
-
-R-011  [Medium] [Inferred risk]  Assessment "outcome" and Orchestrator
-       "progression policy" may be defined twice; ownership of the policy
-       configuration is open
-  Location:
-    - LEARNING_ORCHESTRATOR.md line 87 ("apply the progression policy");
-    - line 106 ("Evaluate every required prerequisite branch before opening
-      a dependent course").
-  Issue: The Assessment outcome is per attempt. Progression combines
-    outcomes, carried-forward evidence and prerequisite branches. If both
-    documents define pass criteria, they can diverge. It is also unspecified
-    who owns the assessment policy: pass rule, coverage, diagnostic budget
-    and consistency check.
-  Impact on Assessment: ASSESSMENT.md receives the policy as an input from
-    the Orchestrator and copies it into the attempt snapshot so that
-    grading is reproducible. It never decides unlocks.
-  Recommended resolution:
-    - Single source: an "assessment policy" configuration owned by the
-      project and supplied by the Orchestrator, with a version.
-    - The Orchestrator's progression policy references attempt outcomes and
-      per-objective evidence. It never recomputes grades.
-    - Define "prerequisite branch cleared" in terms of objective evidence.
-
-R-012  [Medium] [Gap]  Attempt lifecycle, attempt-ID timing and
-       preparation retries are undefined
-  Location:
-    - LEARNING_ORCHESTRATOR.md line 96: "Save the returned questions and
-      criteria under an attempt ID" (when is the ID created?);
-    - lines 72, 123 and 126: only "pending" is named.
-  Issue: There is no attempt state machine (prepared / presented /
-    submitted / grading_pending / graded / abandoned). It is unclear whether
-    the attempt ID exists before prepare_assessment. Preparation is
-    generative: a retried call can return different items, and the spec
-    does not say which one is kept.
-  Impact on Assessment: ASSESSMENT.md requires the Orchestrator to assign
-    the attempt ID before calling prepare. After the scope review it does
-    NOT define attempt states, because the Orchestrator owns them (S-13).
-    It states only its assumptions:
-    - the report is saved before it is shown;
-    - the submission is saved before grading;
-    - pending carries no outcome;
-    - the first saved prepared report is kept and later duplicates are
-      discarded.
-  Recommended resolution: Add an attempt lifecycle to Orchestrator secs 5
-    and 7, for example prepared / presented / submitted / grading_pending /
-    graded / abandoned. Also state that the ID is assigned before prepare.
-    Define abandonment/expiry and whether an abandoned attempt counts.
-
-R-013  [Medium] [Gap]  The "depth" vocabulary is undefined
-  Location:
-    - LEARNING_PLANNER.md lines 12, 57 and 79 ("depth", "at the needed
-      depth");
+R-013  [Medium]  "Depth" has no defined values
+  Problem: Every spec uses "depth", but no scale exists.
+  Where:
+    - LEARNING_PLANNER.md lines 12, 57 and 79.
     - TUTOR.md lines 12, 51 and 99.
-  Issue: Depth is required everywhere but has no values or scale. Assessment
-    cannot calibrate task demand deterministically, and the Orchestrator
-    cannot validate the Planner's coverage rule (Planner line 79, AC3) in a
-    checkable way.
-  Impact on Assessment: ASSESSMENT.md passes depth through as published,
-    notes that the vocabulary is undefined, and aligns task demand mainly
-    with the target statement and the demonstration statement. Without a
-    scale, "required depth" cannot be checked mechanically.
-  Recommended resolution: Define a small enumerated depth or
-    cognitive-demand scale in the Planner. For example: recall / understand
-    / apply / analyse. The CMU alignment page uses a related set of
-    objective types adapted from revised Bloom's taxonomy (see R-040). Use
-    it in the objective records (R-001).
+  Why it matters: Question difficulty and the Planner's "covered at the
+    required depth" rule cannot be checked.
 
-R-014  [Medium] [Gap]  The syllabus's "how the learner will demonstrate the
-       required outcomes" has no structure
-  Location: LEARNING_PLANNER.md line 57.
-  Issue: This is the most assessment-relevant output of the Planner, but it
-    is free-form.
-  Impact on Assessment: ASSESSMENT.md uses it as the primary guide for task
-    formats. Without structure, alignment cannot be checked.
-  Recommended resolution: Represent it per objective as a demonstration
-    expectation. For example: "solve and justify", "explain", "apply to a
-    scenario", "derive".
+R-014  [Medium]  "How the learner will demonstrate the outcomes" is free
+       text
+  Problem: This is the Planner output that matters most for assessment,
+    but it has no structure.
+  Where: LEARNING_PLANNER.md line 57.
+  Why it matters: Matching question types to objectives cannot be checked.
 
-R-015  [Medium] [Gap] [Open]  Carry-forward "when the rubric permits it"
-       has no defined field; can targeted-check evidence count toward
-       completion?
-  Location: LEARNING_ORCHESTRATOR.md line 104.
-  Issue: No rubric field says whether evidence may carry forward. It is
-    also unclear whether a targeted check, or a verification after
-    remediation, can satisfy part of the course-completion requirement.
-  Impact on Assessment: ASSESSMENT.md PROPOSES that a "demonstrated" target
-    may carry forward within the same course and curriculum version, and
-    that diagnostic evidence never carries forward. The engine only marks
-    eligibility; the Orchestrator combines evidence. Carrying evidence
-    across curriculum versions, and "integrated" targets that must be shown
-    together, were left out in the scope review and stay open.
-  Recommended resolution: The owner approves the default and states in
-    Orchestrator sec 8 how carried-forward and targeted-check evidence
-    combine for completion.
+R-015  [Medium]  The carry-forward rule is not defined
+  Problem: The Orchestrator says evidence carries forward "when the rubric
+    permits it", but no rubric field says so. It is also unclear whether a
+    targeted check can count toward finishing a course.
+  Where: LEARNING_ORCHESTRATOR.md line 104; ASSESSMENT.md sec 8.
+  Why it matters: Learners may be re-tested on things they already showed,
+    or let through without enough evidence.
 
-R-016  [Medium] [Inferred risk]  Novelty exclusion ignores Tutor practice
+R-016  [Medium]  The "fresh question" check ignores Tutor practice
        exercises
-  Location:
-    - TUTOR.md line 75: pending_exercise has an ID and prompt;
-    - LEARNING_ORCHESTRATOR.md line 104: "Use a fresh task to verify the
-      same objective after review".
-  Issue: A verification item that matches a practice exercise the learner
-    just completed with a worked example (TUTOR.md line 78) is not a
-    genuine check.
-  Impact on Assessment: ASSESSMENT.md accepts Tutor exercise prompts in the
-    "excluded items" input (optional).
-  Recommended resolution: The Orchestrator includes recent Tutor exercises
-    for the same objectives in the exclusion list (PROPOSED MVP default).
-  Coordinated changes: LEARNING_ORCHESTRATOR.md sec 7 step 4.
+  Problem: A re-check question could match an exercise the Tutor just
+    walked the learner through.
+  Where: TUTOR.md line 75; LEARNING_ORCHESTRATOR.md line 104.
+  Why it matters: The re-check would not be a real test.
 
-R-017  [Medium] [Open]  Disclosure of solutions after grading is undefined
-  Location:
-    - LEARNING_ORCHESTRATOR.md line 105: "Keep the active assessment and its
-      answer key scoped to the attempt";
-    - TUTOR.md line 56: remediation gets "Missed objective IDs and relevant
-      learner-facing feedback. Formal assessment answer keys and private
-      grading criteria are not required".
-  Issue: It is unclear whether learners, and the Tutor through feedback,
-    may see correct answers for a closed attempt.
-  Impact on Assessment: ASSESSMENT.md fixes only that nothing is disclosed
-    while an attempt is open. It defers disclosure after grading to this
-    entry ("Disclosure of correct answers follows R-017"). Proposed default
-    (MD-13):
-    - feedback may state the correct answer or idea for items in the
-      closed attempt, because those items are excluded from future attempts
-      for that learner;
-    - rubric internals and grader rationale stay in the grading record.
-  Recommended resolution: The owner decides. If no shared item bank is
-    adopted (R-029), disclosure after closure is low-risk.
+R-017  [Medium]  Can learners see the correct answers after grading?
+  Problem: No spec says. The keys are hidden during an attempt, but what
+    happens afterwards is undefined.
+  Where: LEARNING_ORCHESTRATOR.md line 105; TUTOR.md line 56;
+    ASSESSMENT.md sec 6.
+  Why it matters: Feedback quality and question reuse both depend on it.
 
-R-018  [Medium] [Open]  Skip threshold and skip path
-  Location:
-    - LEARNING_PLANNER.md line 83 ("pending product decision");
-    - LEARNING_ORCHESTRATOR.md line 106 ("proposed MVP default lets learners
-      skip familiar instruction and proceed directly to an assessment for
-      clearance").
-  Impact on Assessment: ASSESSMENT.md PROPOSES that the skip path uses the
-    same course_completion assessment: the same targets, coverage, criteria
-    and pass rule, covering every mandatory target including skipped ones.
-    "entry_path" is informational and never reaches scoring.
-  Recommended resolution: The owner approves. Planner and Orchestrator then
-    remove "open" wording and reference the assessment.
+R-018  [Medium]  The skip path and skip threshold are still open
+  Problem: The Planner and Orchestrator both mark the skip rule as
+    undecided. ASSESSMENT.md proposes that a learner who skips takes the
+    same course assessment as everyone else.
+  Where: LEARNING_PLANNER.md line 83; LEARNING_ORCHESTRATOR.md line 106.
+  Why it matters: Self-reported knowledge could open courses unchecked.
 
-R-019  [Medium] [Gap]  Rules for conflicting evidence are not defined
-  Location: LEARNING_ORCHESTRATOR.md line 103: "Conflicting evidence can
-    flag a specific objective for review while retaining both records".
-  Issue: There are no rules for:
-    - diagnostic evidence that conflicts with later course evidence;
-    - a pass followed by a failed targeted check;
-    - an inconclusive verification after a not_demonstrated result.
-  Impact on Assessment: ASSESSMENT.md deliberately gives the engine no
-    prior evidence during grading, to keep grading context-free. Conflicts
-    are therefore detected and resolved by the Orchestrator only.
-  Recommended resolution: Orchestrator sec 8 should state that the latest
-    graded course evidence decides progression. Earlier records are kept,
-    and a disagreement flags the objective for a targeted check.
+R-019  [Medium]  There are no rules for conflicting evidence
+  Problem: Nothing says what happens in these cases:
+    - a diagnostic disagrees with a later course result;
+    - a pass is followed by a failed targeted check;
+    - re-check results are unclear.
+  Where: LEARNING_ORCHESTRATOR.md line 103.
+  Why it matters: Progression decisions become unpredictable.
 
-R-020  [High] [Inferred risk]  LLM rubric grading can be inconsistent
-  Location: no spec covers grader reliability. IntelliCode itself
-    acknowledges that LLM components vary and that guardrails do not fully
-    remove this (PDF p. 7 / proc. p. 135, Limitations).
-  Issue: The same response can be judged differently on a retry. Retries
-    and duplicates (Orchestrator lines 123-124) can then yield different
-    grades.
-  Impact on Assessment: ASSESSMENT.md:
-    - grades closed formats deterministically;
-    - ties rubric criteria to the saved level descriptors, with a rationale
-      and response excerpt;
-    - marks a criterion "unscorable" (target inconclusive) when the response
-      cannot be placed on the levels;
-    - relies on the Orchestrator recording the first accepted graded report
-      for duplicates.
-    The first draft also had a second, independent grading judgement for
-    decisive criteria. It was removed in the scope review (S-01).
-  Residual risk: Two gradings of the same open answer could differ, and only
-    the first accepted one counts. Variability is accepted, not detected.
-  Recommended resolution: Accept for the MVP. If grading disputes appear
-    in testing, add the second judgement only for criteria that decide a
-    mandatory target. Combine it with a dispute path (R-026).
+R-020  [High]  AI grading of open answers can be inconsistent
+  Problem: The same written answer may get a different judgement when it
+    is graded again. The MVP limits this in four ways:
+      - closed answers are checked by fixed rules;
+      - written answers are compared against saved rubric levels;
+      - "unscorable" is used when unclear;
+      - only the first accepted grade counts.
+    The variation is not fully removed.
+  Where: no spec covers grader reliability. ASSESSMENT.md sec 8. The
+    IntelliCode paper also notes this (PDF p. 7).
+  Why it matters: Two learners, or two retries, could be graded
+    differently.
 
-R-021  [Medium] [Inferred risk]  Subject-general grading cannot assume
-       automatically verifiable answers
-  Issue: The platform targets any subject (physics, mathematics,
-    humanities, research preparation). Code execution and test cases, as in
-    IntelliCode (PDF pp. 3-4 / proc. pp. 131-132), do not generalise.
-  Impact on Assessment: ASSESSMENT.md does not assume code execution or
-    automatic checking of open answers (S-08). Closed answers are graded
-    deterministically and open ones against the rubric. Symbolic answers
-    are deterministic only through listed equivalent forms. Code tasks are
-    not among the supported formats.
-  Recommended resolution: Confirm the supported formats. Decide whether an
-    expression-equivalence checker or code sandbox is in MVP scope (both
-    are proposed as out of scope).
+R-021  [Medium]  Automatic checking cannot be assumed for every subject
+  Problem: The platform covers any subject. Code tests or automatic
+    checking of open answers do not work for physics proofs or history
+    essays.
+  Where: ASSESSMENT.md sec 8.
+  Why it matters: Expecting automatic grading everywhere would fail.
 
-R-022  [Medium] [Open]  Strength of evidence per target
-  Issue: One item per objective is weak evidence, especially for selected
-    response, where guessing is possible.
-  Impact on Assessment: ASSESSMENT.md PROPOSES:
-    - every in-scope mandatory target is covered by at least one item;
-    - targets about application, derivation or explanation need at least
-      one open-response criterion.
-    Each target reports an "evidence basis": the number of items and the
-    response format. A labelled quality scale was left out (S-04).
-  Recommended resolution: The owner approves the minimum, or sets a higher
-    one against assessment length (R-025).
+R-022  [Medium]  One question per objective is weak evidence
+  Problem: ASSESSMENT.md proposes at least one question per mandatory
+    objective, and at least one written answer for "apply" or "explain"
+    objectives. A single item, especially multiple choice, can be guessed.
+  Where: ASSESSMENT.md sec 8.
+  Why it matters: Learners could pass on luck.
 
-R-023  [Medium] [Inferred risk]  Novelty cannot be fully guaranteed
-  Issue: Fingerprints and variation descriptors catch exact or near-exact
-    repeats. Deep paraphrases remain possible. Objectives with a small task
-    space, such as definitions, may have no genuinely different task.
-  Impact on Assessment: ASSESSMENT.md:
-    - requires a different scenario or values AND a different expected
-      answer where the format permits;
-    - records a short note on how each item is novel;
-    - flags novelty_limited items or returns novelty_unmet;
-    - explicitly does not claim semantic novelty.
-  Recommended resolution: Accept the stated limit. Optionally add a
-    paraphrase-similarity check later.
+R-023  [Medium]  Fresh questions cannot be fully guaranteed
+  Problem: Comparing questions by fingerprint and values catches repeats
+    but not every clever rewording. Some objectives, such as definitions,
+    have few truly different questions.
+  Where: ASSESSMENT.md sec 8.
+  Why it matters: A re-check may sometimes resemble an earlier question.
 
-R-024  [Medium] [Inferred risk]  Unassisted attempts cannot be monitored
-  Issue: Formal attempts are assumed to be the learner's independent work.
-    The Tutor must not help (TUTOR.md line 133), but the learner can use
-    outside help. IntelliCode's hint-attenuated mastery (PDF p. 3 / proc.
-    p. 131) does not apply to unproctored formal assessment.
-  Impact on Assessment: ASSESSMENT.md assumes the submission is independent
-    work and does not monitor integrity (S-10). No spec says whether the
-    Orchestrator may route teach_turn calls while an assessment attempt is
-    open. TUTOR.md line 133 only forbids supplying answers to an active
-    assessment. (Confirmed gap.)
-  Recommended resolution:
-    - Add to the Orchestrator: "no Tutor instruction on the assessed
-      objectives while a formal attempt is open".
-    - Record unproctored attempts as an MVP limitation in user-facing text.
-    - Requiring explanation tasks, which the proposed coverage rule already
-      does for higher-demand targets, partly mitigates the risk.
+R-024  [Medium]  The system cannot tell if the learner worked alone; using
+       the Tutor during an attempt is not forbidden
+  Problem: Attempts are assumed to be independent work. The Tutor must not
+    give answers to an active assessment, but no spec stops the
+    Orchestrator from running Tutor turns on the same objectives while an
+    attempt is open.
+  Where: TUTOR.md line 133; LEARNING_ORCHESTRATOR.md (no rule).
+  Why it matters: Results could be inflated.
 
-R-025  [Low] [Open]  Time limits, assessment length, retake limits and
-       concurrent attempts
-  Issue: No document defines:
-    - a time limit or maximum length;
-    - how many reassessments are allowed;
-    - a cool-down between attempts;
-    - whether a targeted check can run while a course_completion attempt is
-      open.
-  Impact on Assessment: ASSESSMENT.md sets only a coverage minimum (MD-05)
-    and the diagnostic budget (MD-08). It defines no maximum length for
-    course assessments, no time limit and no retake rule. Concurrency is
-    left to the Orchestrator.
-  Recommended resolution: Owner decision. The simplest MVP: no time limit,
-    one open attempt per course, unlimited reassessment after remediation.
+R-025  [Low]  There are no time limits, retake limits, maximum length or
+       concurrency rules
+  Problem: Undefined: how long an assessment may be, how many retakes are
+    allowed, and whether two attempts can be open at once.
+  Where: all specs (absent).
+  Why it matters: Behaviour will differ between developers.
 
-R-026  [Medium] [Gap]  Wrong answer keys and no dispute path
-  Issue: Generated keys can be wrong. The design re-solves derived keys and
-    requires a source basis, but residual errors remain (see R-041). No
-    document defines how a learner disputes a grade or how a wrong key is
-    corrected.
-  Recommended resolution: Add a simple "report a problem with this
-    question" action to the Orchestrator. It marks the item disputed,
-    excludes it, and offers a fresh check. Avoid re-grading other attempts
-    in the MVP.
-  Coordinated changes: LEARNING_ORCHESTRATOR.md secs 4 and 10.
+R-026  [Medium]  A wrong answer key cannot be disputed
+  Problem: Generated answer keys can be wrong, and there is no way to
+    report or correct one.
+  Where: LEARNING_ORCHESTRATOR.md secs 4 and 10 (absent).
+  Why it matters: A learner can be failed by a bad question.
 
-R-027  [Low] [Open]  No human educator oversight
-  Location: IntelliCode recommends use "under the guidance of human
-    educators" (PDF p. 7 / proc. p. 135). This project has no human
-    reviewer role.
-  Recommended resolution: Owner decision. For the MVP, state that the
-    system is a learning aid and that its formal outcomes are not
-    institutional credentials.
+R-027  [Low]  There is no human oversight
+  Problem: No teacher or reviewer role exists. The IntelliCode paper
+    recommends human educator guidance (PDF p. 7).
+  Where: all specs (absent).
+  Why it matters: Results should not be presented as official
+    credentials.
 
-R-028  [Low] [Gap]  Accessibility and language accommodations
-  Issue: No document covers these.
-  Impact on Assessment: ASSESSMENT.md accepts language and accessibility
-    needs as selection and feedback context. They never affect criteria.
-  Recommended resolution: Add accessibility preferences to the Learning
-    Context fields.
+R-028  [Low]  Accessibility and language needs are not specified
+  Problem: ASSESSMENT.md accepts them as inputs, but Learning Context has
+    no field for them.
+  Where: ASSESSMENT.md sec 5; TUTOR.md line 52.
+  Why it matters: Some learners cannot use the system fairly.
 
-R-029  [Low] [Open]  No shared item bank; items are generated per attempt
-  Issue: Generating every item costs time and money and carries a risk of
-    key errors. A curated shared bank would improve reliability, but it
-    needs curation and raises the cross-learner answer-exposure question
-    (R-017). transcript_temp.txt line 290 suggested a "tagged diagnostic
-    question bank" as part of the rejected research-grade proposal.
-  Recommended resolution: The MVP stays with per-attempt generation, as in
-    ASSESSMENT.md. Revisit later.
+R-029  [Low]  There is no shared question bank
+  Problem: Every question is generated fresh. This costs time and money
+    and risks key errors.
+  Where: ASSESSMENT.md sec 8.
+  Why it matters: Cost and reliability. A bank can be added later.
 
-R-030  [Medium] [Open]  No grade scale or numeric score
-  Location: LEARNING_ORCHESTRATOR.md uses "grade" (lines 97, 105) without a
-    scale.
-  Impact on Assessment: ASSESSMENT.md PROPOSES no percentage or numeric
-    score in the MVP: categorical outcome plus per-target statuses.
-  Recommended resolution: Owner confirms, or defines a scale with its use.
-
-R-051  [Medium] [New]  ASSESSMENT.md needs fields that current
-       Orchestrator contracts do not carry
-  Issue: To stay consistent without editing other specs, ASSESSMENT.md
-    defines inputs and outputs that the Orchestrator does not yet send or
-    store:
-    - assessment policy (pass rule, coverage minimum, diagnostic budget,
-      version);
-    - excluded items (IDs and text, optionally including Tutor exercises);
-    - entry path (skip vs study);
-    - pedagogical context (R-009);
-    - selection context vs feedback context (R-008);
-    - goal-preview reference for the diagnostic (R-003);
-    - prepared report split into a learner presentation and a grading
-      snapshot;
-    - graded report fields: criterion judgements, evidence_type, evidence
-      basis, recommended_next_action, diagnostic planning summary;
-    - assessment issue codes;
-    - Assessment's own action names, prepare_assessment and
-      grade_submission. The Orchestrator names only the learner actions
-      start_assessment and submit_assessment.
-  Recommended resolution: Extend Orchestrator secs 5-7 (inputs it
-    assembles, records it saves) and the reporting-protocol table at lines
-    83-87. Record them in docs/AGENT-CONTRACTS.md and
-    docs/DATABASE-SCHEMA.md when those are written.
-
-R-054  [Low] [Confirmed gap] [New]  The Orchestrator does not handle
-       failures when preparing an assessment
-  Location: LEARNING_ORCHESTRATOR.md sec 10 (lines ~117-126). It covers
-    invalid curricula, malformed reports, Tutor interruption and grading
-    timeouts, but not assessment preparation failing, timing out or
-    returning coverage_unmet / novelty_unmet / target_ungrounded.
-  Impact on Assessment: ASSESSMENT.md returns typed, retryable or
-    non-retryable issues. The Orchestrator has no rule for what the learner
-    sees, or whether a non-retryable issue goes to the Planner for review.
-  Recommended resolution: Add a row to Orchestrator sec 10:
-    - retryable preparation issue: retry with the same attempt ID and show
-      "assessment temporarily unavailable";
-    - ungrounded target or unmet coverage: keep progression pending and
-      request Planner review of that target.
+R-030  [Medium]  There is no grade scale
+  Problem: The Orchestrator talks about "grades" but defines no scale.
+    ASSESSMENT.md proposes no numeric score, only pass, not passed or
+    inconclusive, plus a status per objective.
+  Where: LEARNING_ORCHESTRATOR.md lines 97 and 105.
+  Why it matters: The UI and reports need to know what to show.
 
 
 -------------------------------------------------------------------------------
-3. PRE-PLANNING DIAGNOSTIC WORKFLOW CONFLICTS
+ 3.3  The pre-planning diagnostic
 -------------------------------------------------------------------------------
-  (R-002, R-003 and R-004 above are the main conflicts.)
 
-R-031  [Medium] [Inferred risk]  Choosing diagnostic areas versus the
-       Planner's academic ownership
-  Location: LEARNING_PLANNER.md line 78: "The Planner chooses the courses,
-    links, topic order, and depth".
-  Issue: To probe baseline knowledge before any DAG exists, Assessment must
-    choose areas to probe. That resembles choosing prerequisites, which is
-    the Planner's academic role.
-  Impact on Assessment: ASSESSMENT.md:
-    - derives probe areas only from the preview milestones and from
-      prerequisites stated in approved sources;
-    - labels the areas as attempt-scoped and not curriculum IDs;
-    - makes every planning implication advisory.
-    Area priority is PROPOSED: milestones first, then source-stated
-    prerequisites. Stated background is accepted only as unverified
-    self-report. Using it to pick task depth was left out in the scope
-    review.
-  Recommended resolution: Optionally let preview_goal return "candidate
-    foundation areas" so the Planner seeds the diagnostic. This would be an
-    optional Planner output field. Otherwise, accept the advisory model.
+R-031  [Medium]  Choosing what the diagnostic tests overlaps with the
+       Planner's job
+  Problem: Before any curriculum exists, Assessment has to decide which
+    areas to probe. That is close to choosing prerequisites, which is the
+    Planner's job. ASSESSMENT.md limits this to areas taken from the goal
+    preview milestones and from sources, and makes its suggestions
+    advisory only.
+  Where: LEARNING_PLANNER.md line 78; ASSESSMENT.md sec 7 step 2.
+  Why it matters: Responsibilities between the two agents blur.
 
-R-032  [Medium] [Open]  Diagnostic budget
-  Issue: No agreed number of questions, rounds or duration.
-  Impact on Assessment: After the scope review, ASSESSMENT.md PROPOSES a
-    SINGLE round of at most 10 prompts and tasks in total, self-report
-    prompts included. The optional follow-up round was removed (S-02). This
-    follows the "5-10" bound in the transcript's review of decision 4
-    (transcript_temp.txt lines 448-450). The bound was never confirmed as a
-    product decision. No duration is proposed.
-  Recommended resolution: Owner approves or changes the values.
+R-032  [Medium]  The diagnostic size is not agreed
+  Problem: ASSESSMENT.md proposes one round of at most 10 questions,
+    taken from the transcript's "5-10" suggestion. This was never
+    confirmed.
+  Where: ASSESSMENT.md sec 8; transcript_temp.txt lines 448-450.
+  Why it matters: Too long annoys learners; too short tells the Planner
+    little.
 
-R-033  [Medium] [Open]  Keeping the diagnostic separate from course-entry
-       familiarity, and possible reuse
-  Location: LEARNING_PLANNER.md line 41: check_familiarity accepts optional
-    "Prior familiarity or assessment evidence".
-  Issue: The diagnostic and the familiarity check must stay separate
-    workflows, as the owner requires. Existing Planner text would, however,
-    let diagnostic evidence be passed into check_familiarity as prior
-    evidence. That could shorten the familiarity conversation, but it might
-    also be read as merging the two.
-  Impact on Assessment: ASSESSMENT.md keeps them separate. The familiarity
-    conversation still happens after publication.
-  Recommended resolution: Owner decides whether the Orchestrator may pass
-    diagnostic evidence (labelled diagnostic, R-004) into check_familiarity.
-    Recommended: yes, as optional input only. It must never skip the
-    conversation automatically.
+R-033  [Medium]  Diagnostic vs familiarity check: should results be
+       reused?
+  Problem: The two must stay separate. However, the Planner's familiarity
+    check accepts "prior assessment evidence", so diagnostic results could
+    be passed in.
+  Where: LEARNING_PLANNER.md line 41.
+  Why it matters: Passing them in could quietly merge the two steps.
 
-R-034  [Low] [Confirmed]  "Diagnostic answers" is a leftover term in the
-       Planner
-  Location: LEARNING_PLANNER.md line 89: "Personal plans, diagnostic
-    answers, and progress are private to the learner".
-  Issue: The Planner defines no diagnostic. This is probably left over from
-    the earlier diagnostic design. It now matches the new diagnostic's
-    privacy needs.
-  Recommended resolution: Keep it, but define the term by reference to the
-    pre-planning diagnostic once R-002 is approved.
+R-034  [Low]  The Planner mentions "diagnostic answers" but has no
+       diagnostic
+  Problem: This is leftover wording from an earlier design.
+  Where: LEARNING_PLANNER.md line 89.
+  Why it matters: It is confusing to readers.
 
-R-035  [Medium] [Gap]  Diagnostic edge paths
-  Issue: Several cases are undefined:
-    (a) the learner refines the goal after the diagnostic; the preview
-        reference changes;
-    (b) a replan or goal change; should the diagnostic run again?
-    (c) whether the learner sees the diagnostic results;
-    (d) how long diagnostic evidence is retained;
-    (e) the learner declines halfway through.
-  Impact on Assessment: ASSESSMENT.md handles (e): the attempt is graded
-    with diagnostic_partial and unanswered areas are not_assessed. For (a)
-    and (b), the report keeps its goal-preview reference so the
-    Orchestrator can judge relevance. (c) and (d) are not covered.
-  Recommended resolution:
-    - (a) The Orchestrator forwards a diagnostic report only if its preview
-      reference matches, or the owner accepts reuse.
-    - (b) Offer it again on a goal change only.
-    - (c) Show the learner a short, plain summary (recommended for
-      transparency).
-    - (d) Follow the privacy rules for learner data.
+R-035  [Medium]  Diagnostic edge cases are not defined
+  Problem: Undefined: what happens if the learner changes the goal after
+    the diagnostic, whether it runs again after a replan, whether the
+    learner sees the results, and how long results are kept. Stopping
+    halfway is already handled in ASSESSMENT.md.
+  Where: ASSESSMENT.md sec 10; LEARNING_ORCHESTRATOR.md (absent).
+  Why it matters: Stale results could shape a new plan.
 
-
-R-053  [Medium] [Confirmed gap] [New]  The Orchestrator report protocol
-       assumes every graded attempt feeds progression
-  Location: LEARNING_ORCHESTRATOR.md
-    - line 87: an Assessment graded report means "Record the evidence and
-      apply the progression policy";
-    - line 97: "Commit a valid grade, objective evidence, and the resulting
-      progress change together".
-  Issue: A diagnostic attempt has no course, no curriculum version and no
-    pass/fail. Its result must NOT go through the progression policy. The
-    protocol has no branch for attempts that do not feed progression.
-  Impact on Assessment: ASSESSMENT.md labels diagnostic outcomes
-    "diagnostic_complete" / "diagnostic_partial" and the evidence type
-    "diagnostic_task". The Orchestrator still needs a rule that routes
-    these attempts to storage and to the Planner only.
-  Recommended resolution: Add to the "Assessment graded" row in Orchestrator
-    sec 6: "for a pre-planning diagnostic, record the evidence and forward
-    the planning summary; apply no progression change".
-  Coordinated changes: LEARNING_ORCHESTRATOR.md secs 6-7 (together with
-    R-002 to R-004).
-
-R-055  [Low] [Inferred risk] [New]  The learner may be asked about their
-       background three times
-  Location:
-    - LEARNING_PLANNER.md line 39: preview_goal takes optional
-      "Clarifications about interests, intended direction";
-    - ASSESSMENT.md: diagnostic self-report prompts;
-    - LEARNING_PLANNER.md sec 7 step 5: course-entry familiarity
-      conversation.
-  Issue: The same learner may answer background-style questions in the
-    preview, again in the diagnostic and again at each course entry. This
-    adds friction, which runs against the owner's "efficient and
-    learner-friendly" requirement.
-  Impact on Assessment: ASSESSMENT.md accepts background the learner has
-    already stated as input, so diagnostic prompts can skip what is already
-    known. It does not require this.
-  Recommended resolution: The Orchestrator passes preview clarifications
-    into the diagnostic, and the diagnostic asks only for background not
-    already given. Keep familiarity questions syllabus-specific (Planner
-    rule unchanged).
+R-055  [Low]  The learner may be asked about their background three times
+  Problem: Background questions can come up in three places:
+    - in the goal preview's clarifications;
+    - in the diagnostic;
+    - at each course entry.
+  Where: LEARNING_PLANNER.md line 39 and sec 7 step 5; ASSESSMENT.md
+    sec 5.
+  Why it matters: It adds friction, against the "learner-friendly" goal.
 
 
 -------------------------------------------------------------------------------
-4. OBJECTIVE / TOPIC / IDENTIFIER CONTRACT GAPS
+ 3.4  Objectives and topics
 -------------------------------------------------------------------------------
-  (R-001 above is the primary issue.)
 
-R-036  [Medium] [New] [Proposal]  Interim compatibility using
-       target_kind "topic"
-  Issue: Until R-001 is resolved, implementation needs something to key
-    evidence on.
-  Impact on Assessment: ASSESSMENT.md allows targets to be supplied as
-    topics, explicitly labelled target_kind "topic". Evidence is then
-    reported against topic IDs. This is NOT an equivalence between topic_id
-    and objective_id. It is weaker: one status per topic hides which part of
-    a broad topic was missed.
-  Side effects: Planner recommend_review (line 42) would receive topic-level
-    evidence, while its contract says "learning objectives". The Tutor's
-    "missed objective IDs" (line 56) would be topic IDs.
-  Recommended resolution: Use the interim only if R-001 slips. Remove it
-    once objectives exist.
+R-036  [Medium]  Temporary "topic" targets are weaker than objectives
+  Problem: Until R-001 is fixed, ASSESSMENT.md allows topics, clearly
+    labelled as such, to stand in for objectives. One result per topic
+    hides which part of a broad topic was missed.
+  Where: ASSESSMENT.md secs 5 and 10.
+  Why it matters: Remediation becomes less precise.
 
-R-037  [Medium] [Gap]  Course expected outcomes are not linked to topics or
-       objectives
-  Location: LEARNING_PLANNER.md sec 6. Course nodes carry "expected
-    outcomes" and syllabi carry topics, with no link between them.
-  Issue: The Orchestrator cannot check that every expected outcome is
-    assessable, and Assessment cannot report coverage of outcomes.
-  Recommended resolution: Link each objective to one or more outcome IDs
-    (part of R-001). Give outcomes IDs.
+R-037  [Medium]  Expected outcomes are not linked to topics or objectives
+  Problem: Courses list "expected outcomes" and syllabi list topics, with
+    no link between them.
+  Where: LEARNING_PLANNER.md sec 6.
+  Why it matters: Nobody can check that every outcome is taught and
+    tested.
 
 
 -------------------------------------------------------------------------------
-5. SOURCE RELIABILITY AND RETRIEVAL GAPS
+ 3.5  Sources and the teaching library
 -------------------------------------------------------------------------------
 
-R-038  [Medium] [Gap]  The approved-source admission policy is undefined
-  Location:
-    - TUTOR.md line 100: preferred sources are "MIT OpenCourseWare,
-      official university course materials, reputable academic textbooks,
-      and research papers from reputable venues ... permitted by the shared
-      library's policy";
-    - LEARNING_PLANNER.md lines 87-88;
-    - LEARNING_ORCHESTRATOR.md line 26.
-  Issue: Every agent defers to "the library's policy", which is not
-    written. It is undefined what admits a source, who approves it, and how
-    "reputable" is decided.
-  Impact on Assessment: ASSESSMENT.md depends on the policy for grounding
-    items and keys.
-  Recommended resolution: Write a short source-admission policy: allowed
-    domains and types, required provenance fields, and a re-verification
-    interval for URLs.
+R-038  [Medium]  There is no source-approval policy
+  Problem: Every agent says "use approved sources per the library's
+    policy", but the policy is not written.
+  Where: TUTOR.md line 100; LEARNING_PLANNER.md lines 87-88;
+    LEARNING_ORCHESTRATOR.md line 26.
+  Why it matters: Nobody can decide which sources are allowed.
 
-R-039  [Medium] [Inferred risk]  Snapshot excerpts and permitted-excerpt
-       limits
-  Issue: For grading to work without live retrieval, the snapshot must
-    hold the source excerpts that grading needs. Copyright and licence
-    limits on stored excerpts are undefined.
-  Impact on Assessment: ASSESSMENT.md stores only excerpts that the library
-    policy permits. Otherwise it stores references plus the generated
-    reference solution.
-  Recommended resolution: The library policy (R-038) defines the excerpt
-    limits.
+R-039  [Medium]  Saved source excerpts may hit copyright limits
+  Problem: Grading must work without going online, so the attempt has to
+    store the source excerpts it needs. No limit on stored excerpts is
+    defined.
+  Where: ASSESSMENT.md sec 8.
+  Why it matters: Licensing risk.
 
-R-040  [Low] [Record]  Source verification performed for this spec
-  Fetched on 2026-11-28 with this environment's web-fetch tool. Contents
-    were paraphrased by a sub-agent; nothing is quoted at length.
-  Loaded (HTTP 200) and used in ASSESSMENT.md:
-    - CMU Eberly Center, "Align Assessments, Objectives, Instructional
-      Strategies"
-      https://www.cmu.edu/teaching/assessment/basics/alignment.html
-      Supports: assessments, objectives and instruction should be aligned;
-      misalignment harms learning; the page includes a table of objective
-      types adapted from revised Bloom's taxonomy, with example
-      assessments.
-    - CMU Eberly Center, "Formative vs Summative Assessment"
-      https://www.cmu.edu/teaching/assessment/basics/formative-summative.html
-      Supports: formative assessment monitors learning for ongoing
-      feedback and is low stakes; summative assessment evaluates at the end
-      of a unit against a standard.
-    - CMU Eberly Center, "How to assess students' prior knowledge"
-      https://www.cmu.edu/teaching/assessment/priorknowledge/index.html
-      Supports: direct measures (for example pre-tests) versus indirect
-      measures (self-reports, inventories of prior courses). The page does
-      NOT itself discuss the limitations of self-assessment.
-    - CMU Eberly Center, "Rubrics"
-      https://www.cmu.edu/teaching/designteach/teach/rubrics.html
-      Supports: explicit criteria keep grading consistent, counter drift
-      and reduce grader bias. It does NOT cover analytic vs holistic
-      rubrics.
-  Failed:
-    - https://www.celt.iastate.edu/instructional-strategies/effective-teaching-practices/revised-blooms-taxonomy/
-      returned 404. It is NOT cited. No substitute was guessed.
-  Planner-cited URLs, checked for accessibility (no Planner change made):
-    - Illinois CS 598 Quantum Computing (fa2026): loads; its prerequisites
-      section lists linear algebra (including tensor products), probability,
-      proof, and basic programming.
-    - MIT OCW 18.435J syllabus: loads; it lists linear algebra as required.
-    - MIT OCW 18.06SC syllabus: loads.
-    The worked example in LEARNING_PLANNER.md sec 7 is consistent with
-    these pages as fetched.
-  Limitation: None of these sources has been admitted under a project
+R-040  [Low]  Sources were checked, but not formally approved
+  Problem: These pages were checked on 2026-11-28:
+    - four CMU Eberly Center pages, used to justify ASSESSMENT.md's rules;
+    - the three course pages cited by the Planner (Illinois CS 598, MIT
+      18.435J, MIT 18.06SC).
+    All loaded. A fifth page (Iowa State, Bloom's taxonomy) returned 404
+    and is not cited. None of them has been approved under a project
     policy (R-038).
+  Where: ASSESSMENT.md sec 9; LEARNING_PLANNER.md sec 7.
+  Why it matters: The links may break or change later.
 
-R-041  [Medium] [Inferred risk]  Residual errors in derived answer keys
-  Issue: Many keys, such as computed numeric answers, are derived rather
-    than stated in a source. ASSESSMENT.md requires a saved worked solution
-    and an independent re-solve. Both can share the same mistake.
-  Recommended resolution: Accept for the MVP, combined with the dispute
-    path (R-026). Prefer source-stated keys or closed formats for mandatory
-    targets where feasible.
+R-041  [Medium]  Computed answer keys may still be wrong
+  Problem: Many keys are worked out rather than copied from a source.
+    ASSESSMENT.md re-solves each one, but both attempts can make the same
+    mistake.
+  Where: ASSESSMENT.md sec 7 step 4.
+  Why it matters: Correct answers could be marked wrong.
 
-R-042  [Low] [Inferred risk]  The diagnostic may be unavailable when
-       grounding fails
-  Impact on Assessment: ASSESSMENT.md returns a retryable
-    grounding_unavailable. The Orchestrator can proceed to build_curriculum
-    without a diagnostic, as today.
-  Recommended resolution: The Orchestrator tells the learner the diagnostic
-    is temporarily unavailable and that the curriculum can still be built.
+R-042  [Low]  The diagnostic is unavailable if sources cannot be reached
+  Problem: If sources cannot be fetched, the diagnostic cannot be built.
+  Where: ASSESSMENT.md sec 10.
+  Why it matters: Minor. The curriculum can still be built without it.
 
-
--------------------------------------------------------------------------------
-6. IDEAS FROM THE INTELLICODE PDF: CONSIDERED, ADOPTED, REJECTED
--------------------------------------------------------------------------------
-  Source: J. David and S. Ghosh, "IntelliCode: A Multi-Agent LLM Tutoring
-  System with Centralized Learner Modeling", EACL 2026 System
-  Demonstrations, pp. 129-138 (file 2026.eacl-demo.10.pdf).
-  Page references are "PDF page / proceedings page".
-
-  These are design records, not defects. Their IDs are PDF-nn.
-
-  ADOPTED OR ADAPTED (each fits an existing project rule or MVP need)
-  PDF-01  Single-writer orchestrator that validates agent outputs and
-          commits atomically; malformed deltas are rejected and logged
-          (p.2/130).
-          -> Already a project rule (Orchestrator lines 7, 97, 121).
-             Confirms the design; no change.
-  PDF-02  Agents as pure transformations over the shared state (p.3/131).
-          -> Adopted: the engine is stateless, so any attempt can be graded
-             again from its saved snapshot.
-  PDF-03  Hybrid evaluation: deterministic test execution plus semantic
-          review (pp.3-4/131-132).
-          -> Adapted: deterministic grading for closed formats and rubric
-             judgement for open ones. Code execution is not assumed
-             (R-021).
-  PDF-04  Assessment output kept separate from learner-model updates:
-          Skill Assessment validates and the Profiler updates (Table 1
-          p.3/131; demo narrative p.5/133).
-          -> Adopted: the engine reports evidence; only the Orchestrator
-             updates Learning Context.
-  PDF-05  Fixed priority when updates overlap: Skill Assessment before the
-          Profiler (p.2/130).
-          -> Not adopted as a new rule. It is related to the Orchestrator
-             rule that a delayed summary cannot overwrite assessment
-             evidence (Orchestrator line 98, AC6).
-  PDF-06  Misconceptions recorded as structured evidence (p.3/131).
-          -> Adopted lightly: "possible misconceptions" per target, tied to
-             evidence. No misconception taxonomy.
-  PDF-07  Feedback adjusted to proficiency (p.4/132).
-          -> Adopted for feedback WORDING only, after scoring is fixed.
-             Never for the grade.
-  PDF-08  Never disclose full solutions (Safety p.6/134; Ethics p.7/135).
-          -> Adopted as answer-key isolation while an attempt is open.
-             Disclosure after grading is open (R-017).
-  PDF-09  Avoid repeating items within a time window (p.4/132).
-          -> Adapted into a per-learner, per-target exclusion list with
-             fingerprints and no time window (R-023).
-  PDF-10  Frozen prompt versions, JSON validation schemas and a fixed graph
-          snapshot (Appendix D p.10/138).
-          -> Adopted lightly: the instruction versions used are recorded in
-             the prepared report, and the engine checks its output before
-             returning. A snapshot integrity hash was considered and left
-             out (S-03).
-  PDF-11  Versioned learner state with timestamps (Fig. 1 p.1/129;
-          Appendix B.1 p.9/137).
-          -> Already present (curriculum versions, attempt IDs). No change.
-  PDF-12  PII redaction and minimisation before agents see data (p.8/136).
-          -> Adopted: the engine receives no learner identity.
-  PDF-13  LLM components vary and guardrails do not fully remove this
-          (p.7/135).
-          -> Supports the explicit unscorable/inconclusive status (R-020). A
-             second grading pass was deferred (S-01).
-  PDF-14  Conservative estimates for new learners (p.3/131; p.7/135).
-          -> Adopted only as a principle ("unknown stays unknown"). No
-             priors or numbers.
-
-  NOT ADOPTED
-  PDF-15  Use under human educator guidance (p.7/135).
-          -> Not adopted for the MVP; recorded as R-027.
-  PDF-16  Six-agent architecture (Table 1 p.3/131; Fig. 2 p.4/132).
-          -> Rejected. The project has five components and the owner
-             forbids new agents.
-  PDF-17  POMDP framing and reward function (p.2/130; Appendix B
-          pp.9/137).
-          -> Rejected as research-grade.
-  PDF-18  BKT/DKT-inspired mastery updates, Beta(1,1) priors, numeric
-          mastery in [0,1], momentum smoothing (p.3/131; Appendix C
-          pp.9-10/137-138).
-          -> Rejected. MVP scope (G11 in ayush.txt); categorical statuses
-             are used instead.
-  PDF-19  SM-2 spaced repetition and the Progress Synthesizer (p.4/132;
-          Appendix C.4 p.10/138).
-          -> Rejected. Not an assessment responsibility and out of MVP
-             scope.
-  PDF-20  The 40/50/10 task-selection policy (p.4/132, Eq. 1).
-          -> Rejected. Task selection across the curriculum belongs to the
-             Planner and Orchestrator, and the weights are arbitrary for
-             this project.
-  PDF-21  Proficiency composite that weights self-reported skill at 0.20
-          (Appendix C.3 p.10/138).
-          -> Rejected explicitly. It conflicts with the project rule that
-             self-report is never evidence of mastery (Orchestrator line
-             103; TUTOR.md "must not assume ... mastery merely because the
-             context contains a self-reported familiarity claim").
-  PDF-22  Binary outcome per question, y in {0,1} (Appendix B.2 p.9/137).
-          -> Rejected. The project needs partial, unsupported and
-             inconclusive.
-  PDF-23  Five-level graduated hinting (p.4/132).
-          -> Not an assessment feature. It may inspire the Tutor, outside
-             this task.
-  PDF-24  Implementation stack: FastAPI, React, LangGraph, ArangoDB, Gemini
-          2.5 Flash (p.5/133).
-          -> Not adopted. The spec is implementation-independent and the
-             stack is undecided.
-  PDF-25  Reported results: mastery gain 0.0342 vs 0.0054, ECE 0.043 vs
-          0.286, 89.1% success with hints (Table 2 p.7/135; Figs. 4-5
-          p.6/134).
-          -> Not repeated as evidence. The results come from ten simulated
-             learners in a programming domain, and the authors note
-             simulations cannot replace human studies (p.6/134). They are
-             not applicable to this project.
-  PDF-26  Engagement Orchestrator nudges (p.5/133).
-          -> Out of scope.
+R-058  [Medium]  The teaching library has no spec
+  Problem: All agents depend on the shared teaching library. Nothing
+    defines:
+      - its interface;
+      - what an entry stores;
+      - how it is filled;
+      - how new material is added.
+  Where: LEARNING_PLANNER.md lines 87-88; LEARNING_ORCHESTRATOR.md lines
+    26 and 114; TUTOR.md lines 15 and 100; ASSESSMENT.md sec 9;
+    services/knowledge_service.py (empty).
+  Why it matters: It cannot be built.
 
 
 -------------------------------------------------------------------------------
-7. PROPOSED MVP DEFAULTS NEEDING OWNER APPROVAL
+ 3.6  Missing pieces before coding can start
 -------------------------------------------------------------------------------
-  All of these appear in ASSESSMENT.md marked "proposed MVP default".
 
-  MD-01 (R-010)  Pass rule.
-                 Every in-scope mandatory target must be demonstrated.
-                 not_demonstrated or partial gives not_passed; otherwise
-                 inconclusive or not_assessed gives inconclusive; otherwise
-                 passed.
-  MD-02 (R-010)  Target status mapping, in order.
-                 Unscorable makes the target inconclusive; all met makes it
-                 demonstrated; none met or partially met makes it
-                 not_demonstrated; otherwise partial.
-  MD-03 (R-010)  Target scope.
-                 course_completion covers every mandatory target.
-                 Recommended targets are included only when the Orchestrator
-                 asks, and never block. Out-of-scope topics are never
-                 assessed.
-  MD-04 (R-010)  Missing answers.
-                 A blank course item is no_response; an unanswered
-                 diagnostic item leaves its area not_assessed.
-  MD-05 (R-022)  Coverage.
-                 At least one item per in-scope mandatory target.
-                 Application, derivation and explanation targets need at
-                 least one open-response criterion.
-  MD-06 (R-022)  Evidence basis.
-                 Each target reports the number of items and the response
-                 format. Replaces the earlier quality labels (S-04).
-  MD-07 (R-020)  WITHDRAWN in the scope review.
-                 Second independent grading judgement (S-01).
-  MD-08 (R-032)  Diagnostic budget.
-                 A single round, at most 10 prompts and tasks in total.
-  MD-09 (R-031)  Diagnostic area priority.
-                 Milestones first, then source-stated prerequisites.
-  MD-10 (R-015)  Carry-forward.
-                 Within the same course and curriculum version only. Never
-                 from the diagnostic.
-  MD-11 (R-018)  Skip path.
-                 Same assessment, same standard, every mandatory target.
-  MD-12 (R-016)  Exclusion list.
-                 Includes earlier assessment and diagnostic items and,
-                 optionally, recent Tutor exercises.
-  MD-13 (R-017)  Disclosure after grading.
-                 Correct answers may be shown for closed items; rubric
-                 internals are not.
-  MD-14 (R-030)  Score.
-                 No numeric score or percentage; categorical outcome only.
-  MD-15 (R-036)  Interim topics.
-                 target_kind "topic", only while R-001 is unresolved.
-  MD-16 (R-012)  WITHDRAWN from ASSESSMENT.md in the scope review.
-                 Attempt states belong to the Orchestrator (S-13). R-012
-                 keeps the suggested states as a recommendation for the
-                 Orchestrator.
-  MD-17 (R-023)  Novelty rule.
-                 No fingerprint match, and a different scenario or values
-                 AND a different expected answer where the format permits.
+R-057  [High]  No tech stack has been chosen
+  Problem: No document decides the web framework, database, LLM provider,
+    library search method or frontend.
+  Where: backend/requirements.txt (empty); ayush.txt D6.
+  Why it matters: Nothing can be built or tested.
+
+R-059  [Medium]  Learning Context has no data schema
+  Problem: Its contents are described only loosely ("prior knowledge,
+    strengths, weaknesses ..."). No fields are defined, and no value is set
+    for the summary refresh threshold.
+  Where: TUTOR.md line 52; LEARNING_ORCHESTRATOR.md line 98.
+  Why it matters: The database cannot be designed.
+
+R-060  [Low]  There is no login or user spec
+  Problem: The Orchestrator relies on an "authenticated session", but
+    sign-up and login are not described.
+  Where: LEARNING_ORCHESTRATOR.md line 47; api/users.py (empty).
+  Why it matters: The user feature cannot be built.
+
+R-061  [Low]  There is no API or screen design
+  Problem: The API files are empty, and the learner actions are not mapped
+    to endpoints or screens.
+  Where: api/*.py; docs/WORKFLOWS.md (empty).
+  Why it matters: Frontend and backend work cannot be split.
 
 
 -------------------------------------------------------------------------------
-8. REPOSITORY HYGIENE / DOCUMENTATION PROBLEMS
+ 3.7  Repository cleanup
 -------------------------------------------------------------------------------
 
-R-043  [Medium] [Confirmed]  The Orchestrator spec copy is in the wrong
-       folder
-  Evidence:
-    - backend/app/agents/learning_context/AGENT.md is byte-identical to
-      LEARNING_ORCHESTRATOR.md (cmp);
-    - backend/app/orchestrator/ORCHESTRATOR.md is 0 bytes.
-  Resolution: Move the copy to orchestrator/ORCHESTRATOR.md, or replace it
-    with a pointer. Decide the learning_context folder's fate (R-005).
+R-043  [Medium]  The Orchestrator spec copy is in the wrong folder
+  Problem: agents/learning_context/AGENT.md is a copy of the Orchestrator
+    spec, while orchestrator/ORCHESTRATOR.md is empty.
+  Where: agentic-learning-platform/backend/app/...
+  Why it matters: It is misleading. It also feeds into R-005.
 
-R-044  [Low] [Confirmed]  Nested AGENT.md copies duplicate the root specs
-       and their relative links break
-  Evidence:
-    - TUTOR.md lines 114-115 link "LEARNING_ORCHESTRATOR.md" and
-      "LEARNING_PLANNER.md";
-    - LEARNING_ORCHESTRATOR.md lines 28 and 111 link "LEARNING_PLANNER.md#...".
-    Inside backend/app/agents/*/ these relative links do not resolve.
-    The copies are currently identical to the roots, but they will drift
-    once only one side is edited.
-  Resolution: Keep a single source of truth. Either make the nested files
-    short pointers to the root specs, or move the specs and fix the links.
-  Update (re-scan after commit 0cd7ae9): ASSESSMENT.md has now also been
-    copied, byte-identical, to backend/app/agents/assessment/AGENT.md. That
-    makes four duplicated specs. In the copy, the links to review.txt,
-    LEARNING_ORCHESTRATOR.md, LEARNING_PLANNER.md and TUTOR.md
-    (ASSESSMENT.md lines 3 and 235-237) do not resolve.
+R-044  [Low]  There are four duplicate spec copies, with broken links
+  Problem: Each agent folder has an AGENT.md copy of a root spec. Their
+    relative links (for example to LEARNING_PLANNER.md and review.txt) do
+    not work from inside those folders.
+  Where: backend/app/agents/*/AGENT.md.
+  Why it matters: The copies will drift apart once one side is edited.
 
-R-045  [Low] [Confirmed]  ASSESMENT.md is misspelled and empty
-  Evidence: ASSESMENT.md is 0 bytes; the correct name is ASSESSMENT.md.
-  Status: RESOLVED in commit 0cd7ae9. The owner removed ASSESMENT.md and
-    ASSESSMENT.md is tracked.
+R-045  [Low]  RESOLVED. The misspelled, empty ASSESMENT.md was removed in
+       commit 0cd7ae9.
 
-R-046  [Low] [Confirmed]  The README is a duplicated title with no content
-  Evidence: README.md contains "# Multi-Agent-Adaptive-Tutoring-System"
-    twice. agentic-learning-platform/README.md is empty.
-  Resolution: Write a project overview that links the specs.
+R-046  [Low]  The README is a duplicated title with no content
+  Where: README.md; agentic-learning-platform/README.md (empty).
+  Why it matters: New readers do not know where to start.
 
-R-047  [Low] [Confirmed]  Scaffold docs, contracts, tests and requirements
-       are all empty
-  Evidence: 0-byte files:
-    - docs/ARCHITECTURE.md, AGENT-CONTRACTS.md, DATABASE-SCHEMA.md,
-      REQUIREMENTS.md, WORKFLOWS.md;
-    - AGENTS.md;
-    - backend/requirements.txt, app/*.py, contracts/*.py, db/*.py,
-      services/*.py;
-    - tests/*.py.
-  Impact: The contract and schema changes from R-001, R-012 and R-051 have
-    no home yet.
-  Resolution: Populate docs/AGENT-CONTRACTS.md and docs/DATABASE-SCHEMA.md
-    after the objective contract is decided.
+R-047  [Low]  All scaffold files are empty
+  Problem: docs/*.md, AGENTS.md, requirements.txt, and every .py and test
+    file are empty.
+  Where: agentic-learning-platform/.
+  Why it matters: Contract and schema decisions have nowhere to be
+    recorded.
 
-R-048  [Low] [Confirmed]  A temporary transcript is committed
-  Evidence: transcript_temp.txt (618 lines) is committed in d411d7d. It
-    holds superseded decisions (R-007).
-  Resolution: Move it to docs/history/ with a "superseded" header, or
-    remove it once ayush.txt and a decision log capture its content. It
-    was NOT added to .gitignore because it is already tracked.
+R-048  [Low]  A temporary transcript is committed
+  Problem: transcript_temp.txt holds old, superseded decisions (R-007).
+  Where: repository root.
+  Why it matters: Readers may follow outdated decisions.
 
-R-049  [Low] [Confirmed]  ayush.txt is untracked and will drift
-  Evidence: git status shows "?? ayush.txt". Its sections 13-14 list
-    issues that review.txt now records in more detail.
-  Resolution: Commit it if it is meant to be kept. Treat review.txt as the
-    current issue list. ayush.txt was left unchanged as instructed.
-  Update (re-scan): the owner has added ayush.txt to the root .gitignore,
-    so it is deliberately kept local and untracked. The only remaining risk
-    is that it is not backed up by git.
+R-049  [Low]  ayush.txt is ignored by git
+  Problem: The owner added it to .gitignore on purpose, so it stays local.
+  Where: .gitignore line 56.
+  Why it matters: It is not backed up and other team members cannot see
+    it.
 
-R-050  [Low] [Confirmed]  Naming: "Assessment Engine" vs "Assessment Agent"
-  Evidence: the Planner, Orchestrator and Tutor specs use "Assessment
-    Engine"; the owner's brief uses "Assessment Agent". The scaffold folder
-    is agents/assessment.
-  Resolution: ASSESSMENT.md uses "Assessment Engine" and notes the alias.
-    Pick one name project-wide.
+R-050  [Low]  Two names are used: "Assessment Engine" and "Assessment
+       Agent"
+  Where: all specs use "Engine". The owner's brief used "Agent".
+  Why it matters: Minor confusion.
 
-R-052  [Low] [Confirmed]  Two .gitignore files
-  Evidence: agentic-learning-platform/.gitignore is 0 bytes; a root
-    .gitignore has now been created.
-  Resolution: Keep the root file as the single ignore list and remove the
-    empty nested file (owner approval; left untouched).
+R-052  [Low]  There are two .gitignore files
+  Problem: The root file is in use. agentic-learning-platform/.gitignore
+    is empty.
+  Why it matters: Minor confusion.
 
-R-056  [Low] [Confirmed]  The existing specs format their contract tables
-       in different ways
-  Evidence:
-    - sec 4 header: "When the Orchestrator invokes it" (Planner, Tutor) vs
-      "When it is invoked" (Orchestrator);
-    - sec 5: "Action | Required inputs | Optional inputs" (Planner,
-      Orchestrator) vs "Input | Requirement | Description" (Tutor);
-    - sec 6: "Action | Success output | Required content" (Planner) vs
-      "Action | Learner-facing output" (Orchestrator) vs
-      "Field | Required content" (Tutor).
-  Status: As requested, ASSESSMENT.md follows the same 11-section layout.
-    Being a multi-action agent, it uses the Planner/Orchestrator pattern:
-    - one Action | Required inputs | Optional inputs table;
-    - one Action | Success output | Required content table, followed by
-      bold-term definition paragraphs;
-    - a single numbered workflow with a short worked example, as the
-      Planner does.
-    It adds one extra table in sec 4 (purposes), as the Orchestrator does
-    with its reporting-protocol sub-table.
-  Resolution: Optional. Agree one table convention for all agent specs
-    when they are next revised.
+R-056  [Low]  The specs format their tables differently
+  Problem: The Planner, Orchestrator and Tutor use slightly different
+    column layouts for inputs and outputs. ASSESSMENT.md follows the
+    Planner/Orchestrator style.
+  Where: sections 4-6 of each spec.
+  Why it matters: Harder to compare specs side by side.
 
-
--------------------------------------------------------------------------------
-9. QUESTIONS REQUIRING PROJECT-OWNER DECISIONS
--------------------------------------------------------------------------------
-  Q-01  Adopt "assessable learning objectives nested under syllabus topics"
-        as the shared objective contract? Who assigns the IDs (the
-        Planner)? (R-001, R-037)
-  Q-02  Approve the optional pre-planning diagnostic between preview_goal
-        and build_curriculum, and the Planner/Orchestrator contract
-        additions? (R-002)
-  Q-03  Diagnostic route: extend start_assessment to accept a goal-preview
-        reference (Option A), or add start_diagnostic / decline_diagnostic
-        (Option B)? (R-003)
-  Q-04  Add "diagnostic evidence" as a fourth evidence type, excluded from
-        progression? (R-004)
-  Q-05  Learning Context: a record only (remove the agent folder) or a
-        non-writing summarisation helper? (R-005)
-  Q-06  May agents query the shared library directly as a read-only
-        service? (R-006)
-  Q-07  Approve the pass rule and status mapping (MD-01 to MD-04)? Who owns
-        the assessment-policy configuration? (R-010, R-011)
-  Q-08  Accept MVP grading variability without a second judgement, adding
-        one later only if disputes appear? (R-020, S-01)
-  Q-09  Approve the diagnostic budget (single round, at most 10 items) and
-        the area priority? (R-031, R-032)
-  Q-10  Skip path: same course-completion assessment? Is that also the
-        skip threshold? (R-018)
-  Q-11  May learners and the Tutor see correct answers after an attempt
-        closes? (R-017)
-  Q-12  Define a depth / cognitive-demand vocabulary? (R-013)
-  Q-13  Time limits, retakes and concurrency policy? (R-025)
-  Q-14  Add a dispute/report-question path? Any human oversight? (R-026,
-        R-027)
-  Q-15  May diagnostic evidence be passed into check_familiarity? Do
-        learners see diagnostic results? (R-033, R-035)
-  Q-16  Is the pedagogical model registry an Orchestrator configuration
-        file? Is "standards never change with the model" accepted? (R-009)
-
-
--------------------------------------------------------------------------------
-10. RECOMMENDED RESOLUTION ORDER
--------------------------------------------------------------------------------
-  1. R-001 and R-037: objective contract. It blocks Tutor, Orchestrator and
-     Assessment schemas, the DB schema and recommend_review.
-  2. R-005, R-043 and R-044: Learning Context status and spec file layout,
-     before any code is written in the scaffold.
-  3. R-002, R-003 and R-004: diagnostic route and evidence taxonomy. Edit
-     the Planner and Orchestrator together.
-  4. R-010, R-011, R-018 and R-015: pass rule, progression policy, skip
-     path and carry-forward. Approve MD-01 to MD-04, MD-10 and MD-11.
-  5. R-008, R-009 and R-051: grading-context and pedagogical-context fields,
-     plus the remaining Orchestrator contract additions.
-  6. R-012: attempt lifecycle and attempt-ID timing.
-  7. R-006, R-038, R-039 and R-041: retrieval ownership and source-admission
-     policy.
-  8. R-020, R-022, R-023, R-032 and the remaining MD items: reliability and
-     budget defaults.
-  9. R-013, R-014, R-016, R-017, R-019, R-024 to R-030, R-033 to R-036:
-     detail decisions.
-  10. R-045 to R-050, R-052 and R-056: repository hygiene.
-  Fold R-053 into step 3 and R-054 into step 6. Handle R-055 with step 3.
-  After each approval, update the affected specs together, then refresh
-  ASSESSMENT.md to remove "provisional" and "proposed MVP default" markers.
-
-
--------------------------------------------------------------------------------
-11. SCOPE DECISIONS - DELIBERATELY KEPT OUT OF THE MVP SPEC
--------------------------------------------------------------------------------
-  Recorded after the owner asked for scope to be scrutinised and not
-  allowed to overflow. Each item was in the first draft or was considered,
-  and was removed or kept out because it is not needed by the owner's
-  requirements or the existing contracts. None is lost; each can be added
-  later without redesign.
-
-  S-01  Second independent grading judgement for decisive rubric criteria.
-        Removed; it adds cost and latency. Mitigations kept: deterministic
-        closed formats, anchored level descriptors, "unscorable", and the
-        first accepted report counts. Revisit if disputes appear (R-020).
-  S-02  Optional second diagnostic round (follow-up on inconclusive or
-        conflicting areas). Removed; a single bounded round meets the
-        owner's "efficient, bounded" requirement and avoids extra
-        Orchestrator routing (R-032).
-  S-03  Snapshot integrity hash. Removed; the Orchestrator already persists
-        the snapshot under the attempt ID. Mismatch and incompleteness are
-        still caught (snapshot_invalid, submission_mismatch).
-  S-04  Labelled evidence-quality scale (direct_constructed /
-        direct_selected / single_item). Replaced by a plain "evidence
-        basis" (item count and response format), which still meets the
-        owner's "evidence and its quality" requirement.
-  S-05  Separate "integrity notes" report field. Folded into the judgement
-        rationale.
-  S-06  Prior-evidence summary as a prepare input. Removed; the
-        Orchestrator supplies the targets to verify and the excluded items,
-        which is sufficient.
-  S-07  Using stated background to set diagnostic task depth. Removed;
-        background is accepted only as labelled, unverified self-report
-        (R-031).
-  S-08  Code-execution grading, expression-equivalence checkers and
-        paraphrase-similarity novelty checks. Not assumed (R-021, R-023).
-  S-09  Shared item bank. Not in MVP; items are generated per attempt
-        (R-029).
-  S-10  Time limits, proctoring and integrity monitoring. Not in MVP
-        (R-024, R-025).
-  S-11  Dispute workflow and human review. Not an Assessment Engine
-        responsibility; logged for the Orchestrator and owner (R-026,
-        R-027).
-  S-12  Numeric scores and grade scales. Not defined (R-030).
-  S-13  Attempt state machine. Not defined in ASSESSMENT.md, because the
-        Orchestrator owns attempt state. The suggested states moved to the
-        R-012 recommendation.
-
-  Also confirmed as NOT introduced: no new agent, no direct agent-to-agent
-  call, no database write by Assessment, no IRT/CAT/Bayesian/knowledge
-  tracing, no framework/stack choice, no invented pass percentage,
-  question count or duration. The only numeric default is the
-  "at most 10" diagnostic budget, which is labelled as proposed and
-  traced to the transcript.
-
-
--------------------------------------------------------------------------------
-12. IMPLEMENTATION-READINESS GAPS (added after re-scan at commit 0cd7ae9)
--------------------------------------------------------------------------------
-  Re-scan result: every .py file, requirements.txt, AGENTS.md, both READMEs
-  under agentic-learning-platform, docs/*.md and
-  orchestrator/ORCHESTRATOR.md are still 0 bytes. The four AGENT.md files
-  are byte-identical copies of the root specs, including the misplaced
-  Orchestrator copy (R-043). No code exists. The specs define behaviour,
-  but these items must also exist before implementation.
-
-R-057  [High] [Gap]  No implementation stack has been chosen
-  Evidence:
-    - backend/requirements.txt is empty;
-    - ayush.txt D6 lists the stack as open;
-    - the scaffold layout implies a Python API with routers, a DB layer
-      and an LLM service, but no document decides the web framework,
-      database, LLM provider/model, retrieval method for the library, or
-      frontend.
-  Why it matters: Contracts can be written without a stack, but no
-    component can be built or tested.
-  Resolution: Make one short decision record. Keep it minimal for the
-    course project: one web framework, one relational DB, one LLM provider,
-    simple keyword or embedding lookup for the library, and a minimal
-    frontend.
-
-R-058  [Medium] [Gap]  The shared teaching library has no specification
-  Evidence: every agent spec depends on it (Planner lines 87-88,
-    Orchestrator lines 26 and 114, TUTOR.md lines 15 and 100,
-    ASSESSMENT.md sec 9). No document defines:
-    - its lookup interface;
-    - what an entry stores (URL, title, institution, topic tags, permitted
-      excerpt);
-    - how it is seeded;
-    - its admission policy (R-038);
-    - how retrieval adds entries.
-    services/knowledge_service.py is empty.
-  Resolution: A one-page spec covering the entry fields, lookup by
-    topic/tags, admission rules, and a seed list. The seed list could start
-    with the sources already verified in R-040.
-
-R-059  [Medium] [Gap]  The Learning Context record has no schema
-  Evidence: the Orchestrator and Tutor list its contents only loosely:
-    "prior knowledge, strengths, weaknesses, preferences, familiarity and
-    assessment evidence, recent instructional observations" (TUTOR.md
-    line 52), and a summary refreshed "at a configured threshold"
-    (Orchestrator line 98). No fields, evidence record format or threshold
-    value are defined. This is separate from R-005, which asks whether it
-    is an agent at all.
-  Resolution: Define it in docs/DATABASE-SCHEMA.md. Evidence records should
-    be keyed by learner, objective (R-001), evidence type (R-004), source
-    attempt or turn, and curriculum version.
-
-R-060  [Low] [Gap]  No specification for authentication or users
-  Evidence: the Orchestrator resolves "learner identity from the
-    authenticated session" (line 47, sec 5 intro), and api/users.py
-    exists. No document defines sign-up, login or session handling.
-  Resolution: Choose the simplest option that fits the course project, for
-    example username/password with a session token, and note it in the
-    stack decision record (R-057).
-
-R-061  [Low] [Gap]  No learner-facing API or UI specification
-  Evidence: api/learning_plans.py, tutoring.py, assessments.py and
-    users.py are empty, and docs/WORKFLOWS.md is empty. The Orchestrator's
-    learner actions (sec 4) are the natural API surface, but they are not
-    mapped to endpoints or screens.
-  Resolution: Map each Orchestrator learner action to one endpoint, and
-    sketch the 4-5 screens (goal, roadmap, study, assessment, results)
-    after R-001 to R-004 are settled.
 
 ===============================================================================
- END OF REVIEW LOG
+ PART 4 - DECISIONS WAITING FOR THE PROJECT OWNER
+===============================================================================
+
+4.1  Questions
+  Q-01  Should objectives sit under syllabus topics, with the Planner
+        assigning their IDs?                                (R-001, R-037)
+  Q-02  Approve the optional diagnostic between goal preview and
+        curriculum?                                         (R-002)
+  Q-03  How should the diagnostic start?                    (R-003)
+        Option A: start_assessment also accepts a goal-preview reference.
+        Option B: add separate start/decline diagnostic actions.
+  Q-04  Add "diagnostic evidence" as a fourth evidence type that never
+        affects progression?                                (R-004, R-053)
+  Q-05  Is Learning Context a record only, or a helper that never
+        writes?                                             (R-005)
+  Q-06  May agents read the shared library directly?        (R-006)
+  Q-07  Approve the proposed pass rule? Who owns the assessment policy?
+                                                            (R-010, R-011)
+  Q-08  Accept some AI-grading variation for the MVP?       (R-020)
+  Q-09  Approve a diagnostic of one round with at most 10 questions?
+                                                            (R-031, R-032)
+  Q-10  Should learners who skip take the same course assessment?
+                                                            (R-018)
+  Q-11  Show correct answers after grading?                 (R-017)
+  Q-12  Define a depth scale?                               (R-013)
+  Q-13  What are the time limit, retake and concurrency rules?  (R-025)
+  Q-14  Add a "report this question" option? Any human review?
+                                                            (R-026, R-027)
+  Q-15  May diagnostic results feed the familiarity check? Do learners see
+        their diagnostic results?                           (R-033, R-035)
+  Q-16  Where does the list of teaching methods live?       (R-009)
+  Q-17  Which tech stack?                                   (R-057)
+
+4.2  Proposed defaults written into ASSESSMENT.md (need approval)
+  MD-01  Pass rule: every mandatory target must be "demonstrated"; any
+         unclear target makes the outcome "inconclusive", never a pass.
+                                                            (R-010)
+  MD-02  Fixed rules turn each criterion result into a target status.
+                                                            (R-010)
+  MD-03  Course assessments cover every mandatory target. Recommended
+         targets are added only on request and never block.  (R-010)
+  MD-04  A blank answer in a course assessment counts as "no response". In
+         the diagnostic it means "not assessed".             (R-010)
+  MD-05  At least one question per mandatory target, and a written answer
+         for "apply" or "explain" targets.                   (R-022)
+  MD-06  Each result states how many questions, and of what type, it rests
+         on.                                                 (R-022)
+  MD-08  Diagnostic: one round, at most 10 questions and prompts.
+                                                            (R-032)
+  MD-09  Diagnostic areas come from the goal milestones first, then from
+         prerequisites stated in sources.                    (R-031)
+  MD-10  Demonstrated results carry forward only within the same course
+         version, never from the diagnostic.                 (R-015)
+  MD-11  The skip path uses the same assessment and the same standard.
+                                                            (R-018)
+  MD-12  Earlier questions, and optionally Tutor exercises, are excluded
+         from re-checks.                                     (R-016)
+  MD-13  Correct answers may be shown after an attempt is closed.
+                                                            (R-017)
+  MD-14  No numeric score; categorical outcome only.         (R-030)
+  MD-15  "Topic" targets are allowed only until R-001 is fixed.  (R-036)
+  MD-17  A re-check question must have a different scenario or values and
+         a different expected answer.                        (R-023)
+  (MD-07 and MD-16 were withdrawn when the scope was reduced.)
+
+
+===============================================================================
+ PART 5 - BACKGROUND
+===============================================================================
+
+5.1  What was deliberately left out of ASSESSMENT.md to keep the scope
+     small. Each can be added later.
+  S-01  A second AI grading pass for borderline answers.
+  S-02  A second diagnostic round.
+  S-03  A checksum on the saved attempt.
+  S-04  A labelled evidence-quality scale (replaced by "evidence basis").
+  S-05  A separate "integrity notes" field.
+  S-06  A prior-evidence input to Assessment.
+  S-07  Using the learner's stated background to pick question difficulty.
+  S-08  Code execution, formula-equivalence checking and paraphrase
+        detection.
+  S-09  A shared question bank.
+  S-10  Time limits, proctoring and cheating detection.
+  S-11  A dispute workflow and human review (these belong to the
+        Orchestrator and the owner).
+  S-12  Numeric scores.
+  S-13  An attempt state machine (owned by the Orchestrator).
+
+  Also NOT introduced:
+    - no new agent and no agent-to-agent calls;
+    - no database writes by Assessment;
+    - no IRT, adaptive testing or Bayesian models;
+    - no stack choice;
+    - no invented pass percentage or duration.
+
+5.2  The IntelliCode paper (2026.eacl-demo.10.pdf), used for ideas only
+  Ideas taken, adapted to this project:
+    - one writer that validates and commits updates (p. 2; already our
+      rule);
+    - stateless agents (p. 3);
+    - fixed-rule checks plus judgement-based review (pp. 3-4);
+    - assessment reports kept separate from learner-profile updates
+      (pp. 3, 5);
+    - recording misconceptions (p. 3);
+    - feedback worded to the learner's level, never the grade (p. 4);
+    - never revealing solutions during an attempt (pp. 6-7);
+    - avoiding repeated questions (p. 4);
+    - recording prompt versions (p. 10);
+    - no personal data sent to agents (p. 8);
+    - "unknown stays unknown" (pp. 3, 7).
+  Ideas not taken:
+    - six agents (p. 3);
+    - POMDP maths (pp. 2, 9);
+    - BKT/DKT numeric mastery scores (pp. 3, 9-10);
+    - SM-2 spaced repetition (pp. 4, 10);
+    - the 40/50/10 selection formula (p. 4);
+    - counting self-reported skill toward proficiency (p. 10), which
+      conflicts with our rules;
+    - pass/fail-only scoring (p. 9);
+    - five-level hints (p. 4; a possible Tutor idea);
+    - its tech stack (p. 5);
+    - its reported results (pp. 6-7), which come from 10 simulated
+      learners and do not apply here;
+    - engagement nudges (p. 5);
+    - human-educator oversight (p. 7; see R-027).
+
+5.3  How this review was done
+  - Read in full:
+    - all four specs;
+    - README.md;
+    - transcript_temp.txt;
+    - ayush.txt;
+    - every file in the scaffold (all empty except the AGENT.md copies,
+      which were compared byte for byte);
+    - the IntelliCode PDF (all 10 pages).
+  - Web pages were fetched on 2026-11-28 and summarised, not copied.
+  - Limitations:
+    - no code exists, so nothing was tested;
+    - sources were checked for availability and relevance, not approved
+      under a policy.
+
+
+===============================================================================
+ PART 6 - SUGGESTED FIXES
+===============================================================================
+
+ !!  DO NOT APPLY THESE BLINDLY  !!
+ These are suggestions written during the review, not approved decisions.
+ Before using any of them:
+   - re-read the lines cited in Part 3, because the specs may have changed
+     since this review;
+   - get agreement from the project owner or team, especially for items in
+     Part 4;
+   - check that the fix does not break another spec, and change all
+     affected documents together;
+   - after applying a fix, update this file and remove the matching
+     "provisional" or "proposed MVP default" marker in ASSESSMENT.md.
+ A fix that looks right here may be wrong for the project.
+
+Suggested order
+  Step 1   R-001, R-037                 Objective contract
+  Step 2   R-005, R-043, R-044          Learning Context and spec file
+                                        layout
+  Step 3   R-002, R-003, R-004, R-053,  Diagnostic route and evidence types
+           R-055
+  Step 4   R-010, R-011, R-015, R-018   Pass, progression, carry-forward,
+                                        skip
+  Step 5   R-057, R-058, R-059, R-060,  Stack, library, schema, login, API
+           R-061
+  Step 6   R-008, R-009, R-051, R-012,  Remaining Orchestrator contract
+           R-054                        changes
+  Step 7   R-006, R-038, R-039, R-041   Sources and retrieval
+  Step 8   Everything else              Detail decisions and cleanup
+
+Fixes by issue
+
+  R-001  Add "learning objectives" under each syllabus topic in the
+         Planner's output. Each has:
+           - an ID (unique in the curriculum version);
+           - its topic ID;
+           - an observable statement;
+           - a depth (R-013);
+           - a priority;
+           - linked outcome IDs (R-037);
+           - a "how it is shown" note (R-014);
+           - sources.
+         The Orchestrator then checks that every mandatory topic has at
+         least one objective and that IDs are unique. Update the Planner
+         (sec 6 and outputs), Orchestrator (secs 5-7), Tutor (sec 5),
+         ASSESSMENT.md (sec 5) and docs/AGENT-CONTRACTS.md.
+  R-037  Give expected outcomes IDs, and link each objective to them.
+  R-002  Planner: add an optional "diagnostic report" input to
+         build_curriculum, and use it in sec 7 step 2.
+         Orchestrator: add an optional diagnostic step after the preview,
+         and update acceptance criterion 1 to "preview -> optional
+         diagnostic -> curriculum -> optional familiarity check".
+  R-003  Option A: let start_assessment accept a goal-preview reference
+         instead of a Session ID when the purpose is
+         pre_planning_diagnostic. Option B is separate start and decline
+         diagnostic actions; A means fewer new actions. List the four
+         purposes in Orchestrator sec 5.
+  R-053  Orchestrator sec 6: for a diagnostic, save the evidence, forward
+         the summary to the Planner, and make no progression change.
+  R-004  Orchestrator sec 8: add "diagnostic evidence informs planning
+         only, never progression". Planner sec 6: list the evidence kinds
+         (self_reported, diagnostic, assessed).
+  R-055  Pass the preview clarifications into the diagnostic, and only ask
+         what is still unknown.
+  R-005  Choose one:
+           (a) Learning Context is a record: remove or move the agent
+               folder and its test;
+           (b) it is a summarising helper that never writes.
+         Then fix Planner line 21 to name the Orchestrator as the owner.
+  R-043  Move the Orchestrator copy to orchestrator/ORCHESTRATOR.md.
+  R-044  Replace the AGENT.md copies with short pointers to the root
+         specs, or move the specs and fix the links. Keep one source of
+         truth.
+  R-010  Approve or change MD-01 to MD-04 and write the rule in one place.
+  R-011  Create one versioned "assessment policy" file that the
+         Orchestrator passes to Assessment. The Orchestrator uses outcomes;
+         it never re-grades.
+  R-015  Approve MD-10. Write in Orchestrator sec 8 how targeted-check and
+         carried-forward results count toward course completion.
+  R-018  Approve MD-11, then replace the "open" wording in the Planner and
+         Orchestrator.
+  R-057  Write a one-page decision record. Keep it minimal: one web
+         framework, one relational database, one LLM provider, simple
+         library search, and a small frontend.
+  R-058  Write a one-page library spec: entry fields (URL, title,
+         institution, topic tags, allowed excerpt), lookup by topic, and a
+         seed list. The pages in R-040 could be a starting point.
+  R-059  Define Learning Context in docs/DATABASE-SCHEMA.md. Evidence rows
+         are keyed by learner, objective, evidence type, source attempt or
+         turn, and curriculum version. Choose the summary threshold.
+  R-060  Pick the simplest login that fits, for example username and
+         password with a session token.
+  R-061  Map each Orchestrator learner action to one endpoint, and sketch
+         about five screens: goal, roadmap, study, assessment and results.
+  R-008  Orchestrator line 96: send only a "feedback context" (language,
+         accessibility, detail level) with grading, and state that scoring
+         never sees learner context.
+  R-009  Add an optional "pedagogical context per objective" to the
+         Assessment inputs. Keep the list of teaching methods in an
+         Orchestrator config file.
+  R-051  Add the listed fields to Orchestrator secs 5-7 and to
+         docs/AGENT-CONTRACTS.md.
+  R-012  Add attempt states to the Orchestrator (prepared, shown,
+         submitted, grading, graded, abandoned). Say the attempt ID is
+         created before preparation, and that the first saved prepared
+         report is kept.
+  R-054  Add a failure row to the Orchestrator:
+           - a temporary failure is retried with the same attempt ID;
+           - an ungrounded target or unmet coverage keeps progress pending
+             and asks the Planner to review.
+  R-006  State that the shared library is a read-only service that agents
+         may query directly. It holds no learner data.
+  R-038  Write a short source policy: allowed source types and domains,
+         required provenance fields, and how often links are re-checked.
+  R-039  Put excerpt-length limits in the source policy. Otherwise store
+         only references plus the generated reference answer.
+  R-041  Prefer keys stated in sources, or closed answers, for mandatory
+         targets. Rely on R-026 for the rest.
+  R-007  Add a short "decisions that replaced the transcript" note to
+         docs/ARCHITECTURE.md.
+  R-013  Define a small depth scale (for example recall, understand,
+         apply, analyse) and use it in the objective records.
+  R-014  Store "how it is shown" per objective, using a short list (solve
+         and justify, explain, apply to a scenario, derive).
+  R-016  Have the Orchestrator include recent Tutor exercises in the
+         exclusion list (MD-12).
+  R-017  Owner decides. MD-13 is low-risk because there is no shared
+         question bank.
+  R-019  Orchestrator sec 8: the latest graded course result decides
+         progression. Keep older results, and flag disagreements for a
+         targeted check.
+  R-020  Accept for the MVP. If disputes appear in testing, add the second
+         grading pass (S-01) only for answers that decide a mandatory
+         target.
+  R-021  Confirm the supported question formats. Keep code sandboxes and
+         formula checkers out of the MVP.
+  R-022  Approve MD-05, or raise the minimum if assessment length allows.
+  R-023  Accept the limit. A paraphrase check can be added later.
+  R-024  Orchestrator: no Tutor teaching on the assessed objectives while
+         an attempt is open. Tell learners that attempts are unproctored.
+  R-025  Simplest MVP: no time limit, one open attempt per course, and
+         unlimited retakes after remediation.
+  R-026  Add a "report a problem with this question" action. It marks the
+         question disputed, excludes it, and offers a fresh check.
+  R-027  State in the UI that results are learning feedback, not official
+         credentials.
+  R-028  Add language and accessibility fields to Learning Context.
+  R-029  Keep per-attempt generation for now. Revisit a question bank
+         later.
+  R-030  Approve MD-14.
+  R-031  Optionally let the Planner's preview suggest areas for the
+         diagnostic. Otherwise keep the current advisory approach.
+  R-032  Approve MD-08 or set other limits.
+  R-033  Allow diagnostic results as optional input to the familiarity
+         check, but never skip the conversation automatically.
+  R-034  Keep the wording, and point it to the diagnostic once R-002 is
+         approved.
+  R-035  Forward a diagnostic report only if it matches the current goal
+         preview. Offer it again only after a goal change. Show the learner
+         a short summary.
+  R-036  Use "topic" targets only if R-001 is delayed, and remove them
+         afterwards.
+  R-040  Admit these pages under the R-038 policy if they are wanted. Re-
+         check the links before relying on them.
+  R-042  Tell the learner the diagnostic is unavailable, and continue
+         without it.
+  R-046  Write a README: what the project is, where the specs are, and how
+         to run it (once code exists).
+  R-047  Fill docs/AGENT-CONTRACTS.md and docs/DATABASE-SCHEMA.md after
+         steps 1-5.
+  R-048  Move transcript_temp.txt to docs/history/ with a "superseded"
+         note, or delete it once R-007 is done.
+  R-049  Owner's choice. If teammates need it, commit it or copy its key
+         points into docs/.
+  R-050  Pick one name project-wide. "Assessment Engine" is already used
+         by all specs.
+  R-052  Delete the empty agentic-learning-platform/.gitignore.
+  R-056  Agree one table style for all agent specs at their next revision.
+
+===============================================================================
+ END OF review.txt
 ===============================================================================
