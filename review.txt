@@ -64,7 +64,9 @@ LIMITATIONS OF THIS REVIEW
 -------------------------------------------------------------------------------
 0. EXECUTIVE SUMMARY / SEVERITY OVERVIEW
 -------------------------------------------------------------------------------
-  Totals: 56 issues - Critical 1, High 6, Medium 31, Low 18.
+  Totals: 61 issues - Critical 1, High 7, Medium 33, Low 20.
+  (R-057 to R-061 were added in section 12 after a readiness re-scan.
+  R-045 is now resolved.)
   Also recorded: 13 scope decisions (S-xx, section 11) and 26 PDF design
   records (PDF-xx, section 6).
 
@@ -1194,14 +1196,16 @@ R-044  [Low] [Confirmed]  Nested AGENT.md copies duplicate the root specs
     once only one side is edited.
   Resolution: Keep a single source of truth. Either make the nested files
     short pointers to the root specs, or move the specs and fix the links.
-    ASSESSMENT.md was NOT copied into agents/assessment/AGENT.md, to avoid
-    adding a third copy before this is decided.
+  Update (re-scan after commit 0cd7ae9): ASSESSMENT.md has now also been
+    copied, byte-identical, to backend/app/agents/assessment/AGENT.md. That
+    makes four duplicated specs. In the copy, the links to review.txt,
+    LEARNING_ORCHESTRATOR.md, LEARNING_PLANNER.md and TUTOR.md
+    (ASSESSMENT.md lines 3 and 235-237) do not resolve.
 
 R-045  [Low] [Confirmed]  ASSESMENT.md is misspelled and empty
   Evidence: ASSESMENT.md is 0 bytes; the correct name is ASSESSMENT.md.
-  Status: ASSESSMENT.md has been created. ASSESMENT.md was left in place
-    because the task forbids modifying unrelated files.
-  Resolution: Delete ASSESMENT.md (owner approval).
+  Status: RESOLVED in commit 0cd7ae9. The owner removed ASSESMENT.md and
+    ASSESSMENT.md is tracked.
 
 R-046  [Low] [Confirmed]  The README is a duplicated title with no content
   Evidence: README.md contains "# Multi-Agent-Adaptive-Tutoring-System"
@@ -1234,6 +1238,9 @@ R-049  [Low] [Confirmed]  ayush.txt is untracked and will drift
     issues that review.txt now records in more detail.
   Resolution: Commit it if it is meant to be kept. Treat review.txt as the
     current issue list. ayush.txt was left unchanged as instructed.
+  Update (re-scan): the owner has added ayush.txt to the root .gitignore,
+    so it is deliberately kept local and untracked. The only remaining risk
+    is that it is not backed up by git.
 
 R-050  [Low] [Confirmed]  Naming: "Assessment Engine" vs "Assessment Agent"
   Evidence: the Planner, Orchestrator and Tutor specs use "Assessment
@@ -1387,6 +1394,76 @@ R-056  [Low] [Confirmed]  The existing specs format their contract tables
   question count or duration. The only numeric default is the
   "at most 10" diagnostic budget, which is labelled as proposed and
   traced to the transcript.
+
+
+-------------------------------------------------------------------------------
+12. IMPLEMENTATION-READINESS GAPS (added after re-scan at commit 0cd7ae9)
+-------------------------------------------------------------------------------
+  Re-scan result: every .py file, requirements.txt, AGENTS.md, both READMEs
+  under agentic-learning-platform, docs/*.md and
+  orchestrator/ORCHESTRATOR.md are still 0 bytes. The four AGENT.md files
+  are byte-identical copies of the root specs, including the misplaced
+  Orchestrator copy (R-043). No code exists. The specs define behaviour,
+  but these items must also exist before implementation.
+
+R-057  [High] [Gap]  No implementation stack has been chosen
+  Evidence:
+    - backend/requirements.txt is empty;
+    - ayush.txt D6 lists the stack as open;
+    - the scaffold layout implies a Python API with routers, a DB layer
+      and an LLM service, but no document decides the web framework,
+      database, LLM provider/model, retrieval method for the library, or
+      frontend.
+  Why it matters: Contracts can be written without a stack, but no
+    component can be built or tested.
+  Resolution: Make one short decision record. Keep it minimal for the
+    course project: one web framework, one relational DB, one LLM provider,
+    simple keyword or embedding lookup for the library, and a minimal
+    frontend.
+
+R-058  [Medium] [Gap]  The shared teaching library has no specification
+  Evidence: every agent spec depends on it (Planner lines 87-88,
+    Orchestrator lines 26 and 114, TUTOR.md lines 15 and 100,
+    ASSESSMENT.md sec 9). No document defines:
+    - its lookup interface;
+    - what an entry stores (URL, title, institution, topic tags, permitted
+      excerpt);
+    - how it is seeded;
+    - its admission policy (R-038);
+    - how retrieval adds entries.
+    services/knowledge_service.py is empty.
+  Resolution: A one-page spec covering the entry fields, lookup by
+    topic/tags, admission rules, and a seed list. The seed list could start
+    with the sources already verified in R-040.
+
+R-059  [Medium] [Gap]  The Learning Context record has no schema
+  Evidence: the Orchestrator and Tutor list its contents only loosely:
+    "prior knowledge, strengths, weaknesses, preferences, familiarity and
+    assessment evidence, recent instructional observations" (TUTOR.md
+    line 52), and a summary refreshed "at a configured threshold"
+    (Orchestrator line 98). No fields, evidence record format or threshold
+    value are defined. This is separate from R-005, which asks whether it
+    is an agent at all.
+  Resolution: Define it in docs/DATABASE-SCHEMA.md. Evidence records should
+    be keyed by learner, objective (R-001), evidence type (R-004), source
+    attempt or turn, and curriculum version.
+
+R-060  [Low] [Gap]  No specification for authentication or users
+  Evidence: the Orchestrator resolves "learner identity from the
+    authenticated session" (line 47, sec 5 intro), and api/users.py
+    exists. No document defines sign-up, login or session handling.
+  Resolution: Choose the simplest option that fits the course project, for
+    example username/password with a session token, and note it in the
+    stack decision record (R-057).
+
+R-061  [Low] [Gap]  No learner-facing API or UI specification
+  Evidence: api/learning_plans.py, tutoring.py, assessments.py and
+    users.py are empty, and docs/WORKFLOWS.md is empty. The Orchestrator's
+    learner actions (sec 4) are the natural API surface, but they are not
+    mapped to endpoints or screens.
+  Resolution: Map each Orchestrator learner action to one endpoint, and
+    sketch the 4-5 screens (goal, roadmap, study, assessment, results)
+    after R-001 to R-004 are settled.
 
 ===============================================================================
  END OF REVIEW LOG
