@@ -1,3 +1,9 @@
+HISTORICAL ISSUE REGISTER
+The active decisions and disposition of these issues are in
+agentic-learning-platform/docs/ARCHITECTURE.md under Review disposition.
+The issue text and original source line references below record the earlier
+review and are preserved for traceability.
+
 ===============================================================================
  review.txt - DESIGN REVIEW OF THE MULTI-AGENT ADAPTIVE TUTORING SYSTEM
  Last updated: 2026-11-28  
